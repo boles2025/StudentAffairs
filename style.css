@@ -1,0 +1,233 @@
+/* أنماط مخصصة لمنظومة شئون طلاب الجامعات الخاصة والأهلية */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap');
+
+:root {
+  --primary-navy: #0f2b48;
+  --secondary-navy: #1b3d63;
+  --accent-gold: #c59b27;
+  --accent-gold-light: #e5b945;
+  --whatsapp-green: #25D366;
+  --whatsapp-dark: #128C7E;
+  --bg-gradient: linear-gradient(135deg, #0b1c2d 0%, #153250 50%, #0d2238 100%);
+}
+
+* {
+  box-sizing: border-box;
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+}
+
+body {
+  background: var(--bg-gradient);
+  min-height: 100vh;
+  color: #f1f5f9;
+  overflow-x: hidden;
+  direction: rtl;
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(229, 185, 69, 0.4);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.glass-input {
+  background: rgba(15, 30, 48, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--accent-gold-light);
+  box-shadow: 0 0 15px rgba(229, 185, 69, 0.3);
+  background: rgba(15, 30, 48, 0.95);
+}
+
+/* Buttons */
+.btn-gold {
+  background: linear-gradient(135deg, #d4a017 0%, #b8860b 100%);
+  color: #0b1c2d;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(212, 160, 23, 0.3);
+}
+
+.btn-gold:hover {
+  background: linear-gradient(135deg, #e5b945 0%, #c59b27 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(212, 160, 23, 0.45);
+}
+
+.btn-whatsapp {
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+  color: #ffffff;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(37, 211, 102, 0.3);
+}
+
+.btn-whatsapp:hover {
+  background: linear-gradient(135deg, #2ae771 0%, #17a694 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(37, 211, 102, 0.5);
+}
+
+/* Textarea auto-height & custom scroll */
+.students-textarea {
+  min-height: 120px;
+  line-height: 1.7;
+  resize: vertical;
+  font-size: 0.95rem;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(229, 185, 69, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(229, 185, 69, 0.7);
+}
+
+/* Golden text gradient */
+.gold-gradient-text {
+  background: linear-gradient(135deg, #fff2b2 0%, #e5b945 50%, #c59b27 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Pulse animation for live sync */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.pulse-live {
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+/* Tooltip animation */
+.custom-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.has-tooltip:hover .custom-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Badge University */
+.badge-uni {
+  background: linear-gradient(135deg, rgba(229, 185, 69, 0.15) 0%, rgba(229, 185, 69, 0.05) 100%);
+  border: 1px solid rgba(229, 185, 69, 0.3);
+  color: #fde68a;
+}
+
+/* Custom Table Styles */
+table th {
+  letter-spacing: 0.02em;
+}
+
+tbody tr {
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+tbody tr:last-child {
+  border-bottom: none;
+}
+
+/* =========================================================================
+   التحكم الصارم بين وضع البطاقات (للموبايل) ووضع الجدول (للكمبيوتر)
+   ========================================================================= */
+
+@media (max-width: 768px) {
+  /* على شاشات الموبايل: منع ظهور الجدول والأعمدة نهائياً وفرض وضع البطاقات المستقلة */
+  .desktop-only-table,
+  #tableViewContainer,
+  #adminTableContainer {
+    display: none !important;
+  }
+  .mobile-only-cards,
+  #mobileCardsContainer,
+  #adminMobileContainer {
+    display: block !important;
+  }
+
+  /* منع تقريب الشاشة التلقائي في متصفحات الموبايل مثل آيفون Safari */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* أزرار لمس مريحة لراحة الإبهام وسرعة الاستجابة */
+  button, a {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ارتفاع مريح للحقول النصية على الهاتف */
+  .students-textarea {
+    min-height: 95px;
+  }
+}
+
+@media (min-width: 769px) {
+  /* على شاشات الكمبيوتر: إخفاء كروت الموبايل وعرض الجدول المنظم بالأعمدة */
+  .mobile-only-cards,
+  #mobileCardsContainer,
+  #adminMobileContainer {
+    display: none !important;
+  }
+  .desktop-only-table,
+  #tableViewContainer,
+  #adminTableContainer {
+    display: block !important;
+  }
+}
+
+/* تنسيق شاشات الموبايل الصغيرة جداً */
+@media (max-width: 480px) {
+  .glass-card {
+    padding: 1rem !important;
+    border-radius: 1.25rem !important;
+  }
+}
+

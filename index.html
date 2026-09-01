@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شئون الطلاب الجامعات الخاصة والأهلية | م. بولس سمير</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%200%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase Compat CDN -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 flex flex-col min-h-screen">
+
+  <!-- الهيدر والترويسة العلوية -->
+  <header class="sticky top-0 z-40 glass-panel border-b border-amber-500/20 shadow-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4">
+      
+      <!-- شعار المنظومة والعنوان الرئيسي -->
+      <div class="flex items-center gap-4">
+        <div class="w-13 h-13 p-3 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <i class="fa-solid fa-graduation-cap text-2xl"></i>
+        </div>
+        <div>
+          <h1 
+            id="mainHeaderTitle" 
+            ondblclick="handleHeaderDblClick()" 
+            ontouchend="handleTitleTouch(event)"
+            class="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-wide text-white cursor-pointer select-none transition-all duration-300 hover:text-amber-300 active:scale-95 text-center sm:text-right"
+            title="انقر مرتين للدخول إلى لوحة تحكم الإدارة"
+          >
+            شئون الطلاب الجامعات الخاصة والأهلية
+          </h1>
+        </div>
+      </div>
+
+      <!-- أزرار التبديل بين الشاشات -->
+      <div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-center">
+        <div class="bg-slate-800/80 p-1 rounded-xl border border-white/10 flex items-center shadow-inner w-full sm:w-auto justify-center">
+          <button id="navRegisterBtn" onclick="switchView('register')" class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-300 flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 shadow-md">
+            <i class="fa-solid fa-user-plus"></i>
+            <span>تسجيل جديد</span>
+          </button>
+          
+          <button id="navDashboardBtn" onclick="switchView('dashboard')" class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-300 flex items-center justify-center gap-1.5 text-slate-300 hover:text-white">
+            <i class="fa-solid fa-address-book"></i>
+            <span>سجل الجامعات</span>
+            <span id="recordsCounterBadge" class="bg-slate-700 text-amber-300 text-[11px] sm:text-xs px-2 py-0.5 rounded-full font-mono font-bold">0</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- الحاوية الرئيسية للمحتوى -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- ==================== 1. شاشة تسجيل جديد ==================== -->
+    <section id="registerView" class="max-w-2xl mx-auto transition-all duration-300">
+      
+      <!-- بطاقة التسجيل الفخمة -->
+      <div class="glass-card rounded-3xl p-6 sm:p-10 border border-amber-500/20 shadow-2xl relative overflow-hidden">
+        
+        <!-- زخرفة خلفية -->
+        <div class="absolute -top-24 -left-24 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-24 -right-24 w-60 h-60 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- ترويسة النموذج -->
+        <div class="text-center mb-8">
+          <div class="inline-flex p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 mb-3">
+            <i class="fa-solid fa-id-card text-2xl"></i>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white">تسجيل مسؤول شئون طلاب جديد</h2>
+          <p class="text-slate-400 text-sm mt-2">سجّل بيانات مسؤول الجامعة للربط المباشر وإرسال طلبات سحب ملفات الطلاب</p>
+        </div>
+
+        <!-- نموذج الإدخال -->
+        <form id="registrationForm" onsubmit="handleFormSubmit(event)" class="space-y-6">
+          
+          <!-- حقل الاسم ثلاثي -->
+          <div>
+            <label class="block text-sm font-semibold text-slate-200 mb-2 flex items-center justify-between">
+              <span class="flex items-center gap-2">
+                <i class="fa-solid fa-user text-amber-400"></i>
+                الاسم ثلاثي
+              </span>
+              <span class="text-xs text-slate-400">يجب أن يتكون من 3 مقاطع على الأقل</span>
+            </label>
+            <div class="relative">
+              <input 
+                type="text" 
+                id="fullNameInput" 
+                required 
+                placeholder="اكتب الاسم ثلاثي..." 
+                class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-slate-100 placeholder-slate-500 text-base"
+                autocomplete="off"
+              >
+              <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
+                <i class="fa-solid fa-signature"></i>
+              </div>
+            </div>
+            <p id="fullNameError" class="text-rose-400 text-xs mt-1.5 hidden flex items-center gap-1">
+              <i class="fa-solid fa-circle-exclamation"></i>
+              <span>يرجى كتابة الاسم الثلاثي بالكامل (3 مقاطع على الأقل)</span>
+            </p>
+          </div>
+
+          <!-- حقل رقم الموبايل الذكي -->
+          <div>
+            <label class="block text-sm font-semibold text-slate-200 mb-2 flex items-center justify-between">
+              <span class="flex items-center gap-2">
+                <i class="fa-solid fa-phone text-emerald-400"></i>
+                رقم الموبايل (واتساب)
+              </span>
+              <span class="text-xs text-emerald-400 font-mono">010 / 011 / 012 / 015</span>
+            </label>
+            <div class="relative">
+              <input 
+                type="tel" 
+                id="phoneInput" 
+                required 
+                dir="ltr"
+                placeholder="010XXXXXXXX" 
+                class="glass-input w-full px-4 py-3.5 pl-16 rounded-xl text-slate-100 placeholder-slate-500 text-base text-right font-mono"
+                autocomplete="off"
+              >
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center gap-1.5 pointer-events-none text-xs font-mono font-bold text-slate-400 border-r border-white/10 pr-2 my-2">
+                <span>🇪🇬 +20</span>
+              </div>
+            </div>
+            <p id="phoneError" class="text-rose-400 text-xs mt-1.5 hidden flex items-center gap-1">
+              <i class="fa-solid fa-circle-exclamation"></i>
+              <span>يرجى إدخال رقم موبايل مصري صحيح مكون من 11 رقم</span>
+            </p>
+          </div>
+
+          <!-- حقل اختيار أو كتابة الجامعة -->
+          <div>
+            <label class="block text-sm font-semibold text-slate-200 mb-2 flex items-center justify-between">
+              <span class="flex items-center gap-2">
+                <i class="fa-solid fa-building-columns text-amber-400"></i>
+                الجامعة
+              </span>
+              <span class="text-xs text-amber-300 font-semibold">اختر من القائمة أو اكتب اسم أي جامعة بحرية (يدوياً)</span>
+            </label>
+            <div class="relative">
+              <input 
+                type="text" 
+                id="universityInput" 
+                list="universitiesList" 
+                required 
+                placeholder="اختر من القائمة أو اكتب اسم الجامعة يدوياً..." 
+                class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-slate-100 placeholder-slate-500 text-base"
+                autocomplete="off"
+              >
+              <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
+                <i class="fa-solid fa-landmark"></i>
+              </div>
+              <datalist id="universitiesList">
+                <!-- يتم ملؤها ديناميكياً من universities-data.js -->
+              </datalist>
+            </div>
+          </div>
+
+          <!-- زر الحفظ والتسجيل -->
+          <div class="pt-3">
+            <button 
+              type="submit" 
+              id="submitBtn"
+              class="btn-gold w-full py-4 px-6 rounded-xl flex items-center justify-center gap-3 text-lg font-extrabold cursor-pointer"
+            >
+              <i class="fa-solid fa-circle-check text-xl"></i>
+              <span>تسجيل والدخول التلقائي للسجل</span>
+            </button>
+            <p class="text-center text-xs text-slate-400 mt-3 flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-bolt text-amber-400"></i>
+              <span>سيتم حفظ البيانات فوراً والتحويل التلقائي لشاشة إرسال طلبات السحب للواتس</span>
+            </p>
+          </div>
+
+        </form>
+
+      </div>
+    </section>
+
+    <!-- ==================== 2. شاشة سجل البيانات والدخول (Dashboard) ==================== -->
+    <section id="dashboardView" class="hidden transition-all duration-300 space-y-6">
+      
+      <!-- شريط البحث السريع والتحكم العلوي -->
+      <div class="glass-card rounded-2xl p-5 border border-white/10 shadow-xl">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+          
+          <!-- حقل البحث الفوري المباشر -->
+          <div class="w-full md:w-2/3 relative">
+            <input 
+              type="text" 
+              id="searchInput" 
+              oninput="handleSearch(this.value)"
+              onkeyup="handleSearch(this.value)"
+              placeholder="ابحث بالاسم، الموبايل، الجامعة، أو أسماء الطلاب..." 
+              class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-sm sm:text-base text-white placeholder-slate-400"
+            >
+            <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-amber-400 text-lg">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+            <!-- زر مسح البحث إذا وُجد نص -->
+            <button 
+              id="clearSearchBtn" 
+              onclick="clearSearch()" 
+              class="hidden absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 hover:text-white"
+              title="مسح البحث"
+            >
+              <i class="fa-solid fa-circle-xmark"></i>
+            </button>
+          </div>
+
+          <!-- إحصائيات سريعة وأزرار إضافية -->
+          <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-3">
+            <div class="text-xs text-slate-300 bg-slate-800/80 border border-white/10 px-3.5 py-2.5 rounded-xl font-medium flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-amber-400"></i>
+              <span>النتائج المعروضة:</span>
+              <strong id="filteredCount" class="text-amber-300 font-mono text-sm">0</strong>
+            </div>
+
+            <button onclick="switchView('register')" class="px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-sm font-bold flex items-center gap-2 transition-all">
+              <i class="fa-solid fa-plus"></i>
+              <span class="hidden sm:inline">إضافة جديد</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- حاوية السجلات (الجدول للكمبيوتر والبطاقات للموبايل) -->
+      <div id="recordsContainer">
+        <!-- 1. عرض الجدول المنسق بالأعمدة (للشاشات الكبيرة والكمبيوتر فقط) -->
+        <div id="tableViewContainer" class="desktop-only-table glass-card rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse min-w-[1000px]">
+              <thead>
+                <tr class="bg-slate-800/95 text-amber-300 border-b border-amber-500/30 text-xs sm:text-sm font-bold select-none">
+                  <th class="py-4 px-3 w-12 text-center">#</th>
+                  <th class="py-4 px-4 min-w-[180px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-landmark text-amber-400"></i>
+                      الجامعة
+                    </span>
+                  </th>
+                  <th class="py-4 px-4 min-w-[170px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-user-tie text-amber-400"></i>
+                      اسم المسؤول
+                    </span>
+                  </th>
+                  <th class="py-4 px-4 min-w-[140px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-phone text-emerald-400"></i>
+                      رقم الموبايل
+                    </span>
+                  </th>
+                  <th class="py-4 px-4 min-w-[480px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-users text-amber-400"></i>
+                      أسماء الطلاب المراد سحبهم
+                    </span>
+                  </th>
+                  <th class="py-4 px-3 w-28 text-center">
+                    <span class="flex items-center justify-center gap-1">
+                      <i class="fa-brands fa-whatsapp text-emerald-400 text-sm"></i>
+                      <span>واتساب</span>
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="recordsTableBody" class="divide-y divide-white/5 text-sm">
+                <!-- يتم توليد صفوف الجدول ديناميكياً هنا -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 2. عرض البطاقات الذكية المستقلة كلياً (للموبايل فقط) -->
+        <div id="mobileCardsContainer" class="mobile-only-cards space-y-4">
+          <!-- يتم توليد كروت الموبايل ديناميكياً هنا -->
+        </div>
+      </div>
+
+      <!-- في حالة عدم وجود أي نتائج -->
+      <div id="emptyState" class="hidden glass-panel rounded-3xl p-12 text-center border border-white/10">
+        <div class="w-20 h-20 mx-auto rounded-full bg-slate-800/90 border border-white/10 flex items-center justify-center text-3xl text-amber-400 mb-4 shadow-inner">
+          <i class="fa-solid fa-folder-open"></i>
+        </div>
+        <h3 class="text-xl font-bold text-white mb-1">لا توجد سجلات مطابقة</h3>
+        <p class="text-slate-400 text-sm max-w-md mx-auto mb-6">لم يتم العثور على أي نتائج تطابق عملية البحث، أو أنه لم يتم تسجيل أي ممثل جامعة بعد.</p>
+        <button onclick="switchView('register')" class="btn-gold px-6 py-2.5 rounded-xl text-sm font-bold inline-flex items-center gap-2">
+          <i class="fa-solid fa-user-plus"></i>
+          <span>تسجيل أول مسؤول الآن</span>
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ==================== 3. شاشة لوحة تحكم الإدارة (Admin Dashboard) ==================== -->
+    <section id="adminView" class="hidden transition-all duration-300 space-y-6">
+      
+      <!-- ترويسة لوحة الإدارة والأزرار السريعة -->
+      <div class="glass-card rounded-3xl p-6 sm:p-8 border border-amber-500/30 shadow-2xl relative overflow-hidden">
+        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          
+          <!-- العنوان وشارة الصلاحيات -->
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-200 text-slate-950 flex items-center justify-center text-2xl shadow-xl shadow-amber-500/20">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <h2 class="text-xl sm:text-2xl font-black text-white tracking-wide">
+                  لوحة التحكم والرقابة الشاملة
+                </h2>
+                <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold font-mono">
+                  ADMIN 8520
+                </span>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-300">
+                التحكم المركزي الكامل في كافة السجلات، تعديل البيانات، إدارة الحذف، واستعراض إحصائيات النظام لحظياً
+              </p>
+            </div>
+          </div>
+
+          <!-- الأزرار السريعة -->
+          <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <!-- تصدير ملف Excel -->
+            <button 
+              onclick="exportAdminDataToExcel()" 
+              class="btn-whatsapp px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-lg hover:scale-105 transition-all"
+              title="تصدير تقرير شامل إلى ملف Excel (CSV)"
+            >
+              <i class="fa-solid fa-file-excel text-base"></i>
+              <span>تصدير Excel 📊</span>
+            </button>
+
+            <!-- إضافة مسؤول جديد من الإدارة -->
+            <button 
+              onclick="openAdminAddModal()" 
+              class="btn-gold px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-lg hover:scale-105 transition-all"
+              title="إضافة مسؤول جامعة جديد فوراً"
+            >
+              <i class="fa-solid fa-user-plus text-base"></i>
+              <span>إضافة مسؤول ➕</span>
+            </button>
+
+            <!-- تسجيل الخروج من الإدارة -->
+            <button 
+              onclick="exitAdminView()" 
+              class="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
+              title="العودة إلى السجل العام"
+            >
+              <i class="fa-solid fa-right-from-bracket"></i>
+              <span>خروج من الإدارة 🚪</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- كروت المؤشرات والإحصائيات الشاملة (KPI Cards) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        
+        <!-- كرت 1: إجمالي الجامعات -->
+        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs text-slate-400 font-semibold mb-1">إجمالي الجامعات</p>
+              <h3 id="adminStatUniversities" class="text-3xl font-black text-white font-mono">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xl">
+              <i class="fa-solid fa-landmark"></i>
+            </div>
+          </div>
+          <div class="mt-3 text-[11px] text-amber-300/80 font-medium">الجامعات المسجلة بالمنظومة</div>
+        </div>
+
+        <!-- كرت 2: إجمالي المسؤولين -->
+        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs text-slate-400 font-semibold mb-1">المسؤولين المسجلين</p>
+              <h3 id="adminStatRepresentatives" class="text-3xl font-black text-white font-mono">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-blue-500/15 text-blue-400 border border-blue-500/20 flex items-center justify-center text-xl">
+              <i class="fa-solid fa-users-gear"></i>
+            </div>
+          </div>
+          <div class="mt-3 text-[11px] text-blue-300/80 font-medium">مسؤولو شئون الطلاب المعتمدين</div>
+        </div>
+
+        <!-- كرت 3: إجمالي الطلاب المطلوب سحبهم -->
+        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs text-slate-400 font-semibold mb-1">إجمالي طلبات السحب</p>
+              <h3 id="adminStatStudents" class="text-3xl font-black text-white font-mono text-emerald-400">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl">
+              <i class="fa-solid fa-user-graduate"></i>
+            </div>
+          </div>
+          <div class="mt-3 text-[11px] text-emerald-300/80 font-medium">إجمالي الطلاب المطلوب سحبهم حالياً</div>
+        </div>
+
+        <!-- كرت 4: جامعات لديها طلبات حالية -->
+        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs text-slate-400 font-semibold mb-1">جامعات بها طلبات</p>
+              <h3 id="adminStatActiveUnis" class="text-3xl font-black text-white font-mono text-amber-300">0</h3>
+            </div>
+            <div class="w-12 h-12 rounded-2xl bg-purple-500/15 text-purple-400 border border-purple-500/20 flex items-center justify-center text-xl">
+              <i class="fa-solid fa-paper-plane"></i>
+            </div>
+          </div>
+          <div class="mt-3 text-[11px] text-purple-300/80 font-medium">جامعات لديها أسماء قيد المتابعة</div>
+        </div>
+
+      </div>
+
+      <!-- شريط البحث السريع للإدارة والفلترة -->
+      <div class="glass-card rounded-2xl p-4 border border-white/10 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="w-full md:w-2/3 relative">
+          <input 
+            type="text" 
+            id="adminSearchInput" 
+            oninput="handleAdminSearch(this.value)"
+            onkeyup="handleAdminSearch(this.value)"
+            placeholder="🔍 بحث إداري شامل بأي معلومة (الاسم، الجامعة، الهاتف، أو أسماء الطلاب)..." 
+            class="glass-input w-full px-5 py-3.5 pr-12 rounded-xl text-sm sm:text-base text-white placeholder-slate-400"
+          >
+          <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-amber-400 text-lg">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </div>
+        </div>
+
+        <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-3 text-xs text-slate-300 bg-slate-800/80 border border-white/10 px-4 py-3 rounded-xl font-medium">
+          <i class="fa-solid fa-list-check text-amber-400"></i>
+          <span>السجلات المطابقة:</span>
+          <strong id="adminFilteredCount" class="text-amber-300 font-mono text-sm">0</strong>
+        </div>
+      </div>
+
+      <!-- حاوية سجلات الإدارة (الجدول للكمبيوتر والبطاقات للموبايل) -->
+      <div id="adminRecordsContainer">
+        <!-- جدول الإدارة الشامل بكافة الصلاحيات (للشاشات الكبيرة والكمبيوتر فقط) -->
+        <div id="adminTableContainer" class="desktop-only-table glass-card rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse">
+              <thead>
+                <tr class="table-header-row text-xs uppercase tracking-wider font-bold">
+                  <th class="py-4 px-3 text-center w-12">#</th>
+                  <th class="py-4 px-4 min-w-[170px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-landmark text-amber-400"></i>
+                      الجامعة
+                    </span>
+                  </th>
+                  <th class="py-4 px-4 min-w-[170px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-user-tie text-amber-400"></i>
+                      اسم المسؤول
+                    </span>
+                  </th>
+                  <th class="py-4 px-4 min-w-[140px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-phone text-emerald-400"></i>
+                      رقم الموبايل
+                    </span>
+                  </th>
+                  <th class="py-4 px-3 text-center min-w-[110px]">
+                    <span class="flex items-center justify-center gap-1.5">
+                      <i class="fa-solid fa-users text-amber-400"></i>
+                      عدد الطلاب
+                    </span>
+                  </th>
+                  <th class="py-4 px-4 min-w-[320px]">
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-list-ol text-blue-400"></i>
+                      أسماء الطلاب المراد سحبهم
+                    </span>
+                  </th>
+                  <th class="py-4 px-4 text-center min-w-[200px]">
+                    <span class="flex items-center justify-center gap-1.5">
+                      <i class="fa-solid fa-sliders text-amber-400"></i>
+                      لوحة التحكم والإجراءات
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="adminTableBody" class="divide-y divide-white/5 text-sm">
+                <!-- يتم توليد الصفوف الإدارية ديناميكياً هنا -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- كروت الإدارة المستقلة كلياً (للموبايل فقط) -->
+        <div id="adminMobileContainer" class="mobile-only-cards space-y-4">
+          <!-- يتم توليد كروت إدارة الموبايل ديناميكياً هنا -->
+        </div>
+      </div>
+
+      <!-- في حالة عدم وجود نتائج في بحث الإدارة -->
+      <div id="adminEmptyState" class="hidden glass-panel rounded-3xl p-12 text-center border border-white/10">
+        <div class="w-16 h-16 mx-auto rounded-full bg-slate-800/90 border border-white/10 flex items-center justify-center text-2xl text-amber-400 mb-3 shadow-inner">
+          <i class="fa-solid fa-filter-circle-xmark"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-1">لا توجد سجلات مطابقة في الإدارة</h3>
+        <p class="text-slate-400 text-xs max-w-sm mx-auto">لم يتم العثور على أي نتائج تطابق عملية البحث الإداري.</p>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ==================== الفوتر الرسمي ==================== -->
+  <footer class="mt-auto glass-panel border-t border-amber-500/20 py-5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-right">
+      
+      <!-- توقيع المهندس بولس سمير -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <i class="fa-solid fa-laptop-code text-lg"></i>
+        </div>
+        <div>
+          <p class="text-sm font-bold text-white tracking-wide">
+            تصميم: <span class="gold-gradient-text font-black text-base">مهندس بولس سمير</span>
+          </p>
+          <p class="text-xs text-amber-300/80 font-medium">
+            مدير شئون الطلاب - جامعة اللوتس
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ==================== نافذة التحقق من كلمة مرور الإدارة ==================== -->
+  <div id="adminAuthModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-all duration-300">
+    <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full border border-amber-500/30 shadow-2xl relative">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-3xl mb-4 shadow-lg shadow-amber-500/20">
+          <i class="fa-solid fa-lock"></i>
+        </div>
+        <h3 class="text-xl font-extrabold text-white mb-1">لوحة تحكم الإدارة المركزية</h3>
+        <p class="text-xs text-slate-300">أدخل الرقم السري المعتمد للدخول إلى لوحة التحكم والرقابة</p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-200 mb-2">كلمة المرور السرية</label>
+          <div class="relative">
+            <input 
+              type="password" 
+              id="adminPasswordInput" 
+              placeholder="••••" 
+              maxlength="10"
+              onkeyup="if(event.key === 'Enter') submitAdminPassword()"
+              class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-center text-xl tracking-widest font-mono text-white placeholder-slate-500"
+              autocomplete="off"
+            >
+            <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-amber-400">
+              <i class="fa-solid fa-key"></i>
+            </div>
+          </div>
+          <p id="adminPasswordError" class="text-rose-400 text-xs mt-2 hidden text-center font-bold">
+            <i class="fa-solid fa-circle-exclamation ml-1"></i> كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <button 
+            onclick="submitAdminPassword()" 
+            class="btn-gold flex-1 py-3 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+          >
+            <i class="fa-solid fa-right-to-bracket"></i>
+            <span>تأكيد الدخول</span>
+          </button>
+          <button 
+            onclick="closeAdminAuthModal()" 
+            class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 font-bold text-sm cursor-pointer transition-colors"
+          >
+            إلغاء
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== نافذة تعديل بيانات المسؤول من الإدارة ==================== -->
+  <div id="adminEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-all duration-300">
+    <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-amber-500/30 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
+        <div class="flex items-center gap-3">
+          <span class="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            <i class="fa-solid fa-user-pen text-lg"></i>
+          </span>
+          <h3 class="text-lg font-black text-white">تعديل بيانات المسؤول والطلاب</h3>
+        </div>
+        <button onclick="closeAdminEditModal()" class="text-slate-400 hover:text-white p-2 text-lg cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="adminEditForm" onsubmit="handleAdminEditSubmit(event)" class="space-y-4">
+        <input type="hidden" id="editRepId">
+
+        <div>
+          <label class="block text-xs font-bold text-slate-200 mb-1.5">اسم المسؤول ثلاثي</label>
+          <input 
+            type="text" 
+            id="editFullNameInput" 
+            required 
+            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
+          >
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-200 mb-1.5">رقم الموبايل</label>
+          <input 
+            type="tel" 
+            id="editPhoneInput" 
+            required 
+            dir="ltr"
+            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white text-right font-mono"
+          >
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-200 mb-1.5">اسم الجامعة</label>
+          <input 
+            type="text" 
+            id="editUniversityInput" 
+            list="universitiesList" 
+            required 
+            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
+          >
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs font-bold text-slate-200">أسماء الطلاب المراد سحبهم</label>
+            <span class="text-[11px] text-amber-300/80">طالب في كل سطر</span>
+          </div>
+          <textarea 
+            id="editStudentsInput" 
+            rows="5"
+            placeholder="اكتب أو ألصق أسماء الطلاب هنا..."
+            class="students-textarea glass-input w-full p-3.5 rounded-xl text-sm text-white min-h-[120px]"
+          ></textarea>
+        </div>
+
+        <div class="flex items-center gap-3 pt-4 border-t border-white/10">
+          <button 
+            type="submit" 
+            id="saveEditBtn"
+            class="btn-gold flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+          >
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span>حفظ التعديلات في السحابة</span>
+          </button>
+          <button 
+            type="button" 
+            onclick="closeAdminEditModal()" 
+            class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 font-bold text-sm cursor-pointer"
+          >
+            إلغاء
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== نافذة إضافة مسؤول جديد من الإدارة ==================== -->
+  <div id="adminAddModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-all duration-300">
+    <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-amber-500/30 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
+        <div class="flex items-center gap-3">
+          <span class="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            <i class="fa-solid fa-user-plus text-lg"></i>
+          </span>
+          <h3 class="text-lg font-black text-white">إضافة مسؤول جامعة جديد</h3>
+        </div>
+        <button onclick="closeAdminAddModal()" class="text-slate-400 hover:text-white p-2 text-lg cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="adminAddForm" onsubmit="handleAdminAddSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-200 mb-1.5">الاسم ثلاثي</label>
+          <input 
+            type="text" 
+            id="adminNewFullName" 
+            required 
+            placeholder="اكتب الاسم ثلاثي..."
+            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
+          >
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-200 mb-1.5">رقم الموبايل (مصر)</label>
+          <input 
+            type="tel" 
+            id="adminNewPhone" 
+            required 
+            dir="ltr"
+            placeholder="010XXXXXXXX"
+            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white text-right font-mono"
+          >
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-200 mb-1.5">اسم الجامعة</label>
+          <input 
+            type="text" 
+            id="adminNewUniversity" 
+            list="universitiesList" 
+            required 
+            placeholder="اختر أو اكتب اسم الجامعة يدوياً..."
+            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
+          >
+        </div>
+
+        <div class="flex items-center gap-3 pt-4 border-t border-white/10">
+          <button 
+            type="submit" 
+            id="saveNewAdminBtn"
+            class="btn-gold flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+          >
+            <i class="fa-solid fa-check"></i>
+            <span>إضافة وحفظ المسؤول</span>
+          </button>
+          <button 
+            type="button" 
+            onclick="closeAdminAddModal()" 
+            class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 font-bold text-sm cursor-pointer"
+          >
+            إلغاء
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Alert -->
+  <div id="toastAlert" class="fixed bottom-4 left-4 right-4 sm:right-auto sm:left-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="glass-card px-5 py-3.5 rounded-2xl border border-emerald-500/40 bg-slate-900/95 shadow-2xl flex items-center gap-3 text-white">
+      <div id="toastIcon" class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+        <i class="fa-solid fa-check"></i>
+      </div>
+      <div>
+        <p id="toastTitle" class="text-sm font-bold text-white">تم الإجراء بنجاح</p>
+        <p id="toastMessage" class="text-xs text-slate-300">تم حفظ التغييرات وتحديث السجل</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="universities-data.js"></script>
+  <script src="firebase-service.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
