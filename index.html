@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>شئون الطلاب الجامعات الخاصة والأهلية | م. بولس سمير</title>
+  <title>منظومة شئون طلاب الجامعات الخاصة والأهلية | م. بولس سمير</title>
   
   <!-- Favicon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%200%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
@@ -17,7 +17,7 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 
   <!-- Custom Styles -->
   <link rel="stylesheet" href="style.css">
@@ -26,511 +26,562 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 </head>
-<body class="bg-slate-900 text-slate-100 flex flex-col min-h-screen">
+<body class="flex flex-col min-h-screen">
 
-  <!-- الهيدر والترويسة العلوية -->
-  <header class="sticky top-0 z-40 glass-panel border-b border-amber-500/20 shadow-xl">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4">
+  <!-- ==================== الهيدر الرئيسي ==================== -->
+  <header class="sticky top-0 z-40 glass-panel border-b border-white/10 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
       
       <!-- شعار المنظومة والعنوان الرئيسي -->
-      <div class="flex items-center gap-4">
-        <div class="w-13 h-13 p-3 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20">
-          <i class="fa-solid fa-graduation-cap text-2xl"></i>
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center shadow-md flex-shrink-0">
+          <i class="fa-solid fa-graduation-cap text-xl"></i>
         </div>
         <div>
-          <h1 
-            id="mainHeaderTitle" 
-            ondblclick="handleHeaderDblClick()" 
-            ontouchend="handleTitleTouch(event)"
-            class="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-wide text-white cursor-pointer select-none transition-all duration-300 hover:text-amber-300 active:scale-95 text-center sm:text-right"
-            title="انقر مرتين للدخول إلى لوحة تحكم الإدارة"
-          >
+          <h1 class="text-base sm:text-xl font-black tracking-wide text-white leading-tight">
             شئون الطلاب الجامعات الخاصة والأهلية
           </h1>
+          <p class="text-[11px] text-amber-300/80 font-medium hidden sm:block">
+            منظومة سحب وتنسيق ملفات الطلاب والمتابعة الحية
+          </p>
         </div>
       </div>
 
-      <!-- أزرار التبديل بين الشاشات -->
-      <div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-center">
-        <div class="bg-slate-800/80 p-1 rounded-xl border border-white/10 flex items-center shadow-inner w-full sm:w-auto justify-center">
-          <button id="navRegisterBtn" onclick="switchView('register')" class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-300 flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 shadow-md">
-            <i class="fa-solid fa-user-plus"></i>
-            <span>تسجيل جديد</span>
-          </button>
+      <!-- عناصر التحكم بالهيدر -->
+      <div class="flex items-center gap-3">
+        
+        <!-- قسم الموظف المسجل -->
+        <div id="headerUserSection" class="hidden flex items-center gap-2.5">
           
-          <button id="navDashboardBtn" onclick="switchView('dashboard')" class="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-300 flex items-center justify-center gap-1.5 text-slate-300 hover:text-white">
-            <i class="fa-solid fa-address-book"></i>
-            <span>سجل الجامعات</span>
-            <span id="recordsCounterBadge" class="bg-slate-700 text-amber-300 text-[11px] sm:text-xs px-2 py-0.5 rounded-full font-mono font-bold">0</span>
+          <!-- بطاقة الجامعة المسجلة المدمجة -->
+          <div class="flex items-center gap-2 bg-slate-800/80 border border-white/10 px-3 py-1.5 rounded-xl text-right">
+            <div id="userAvatarText" class="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center">
+              🏛️
+            </div>
+            <div class="leading-tight max-w-[150px] sm:max-w-[220px] truncate">
+              <span id="userUniversityDisplay" class="font-bold text-white text-xs block truncate">اسم الجامعة</span>
+              <span id="userNameDisplay" class="text-[10px] text-amber-300 block truncate">شئون الطلاب</span>
+            </div>
+          </div>
+
+          <!-- زر الإشعارات الحية -->
+          <button 
+            id="notifBellBtn" 
+            onclick="toggleNotificationsModal()" 
+            class="relative p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-amber-300 border border-white/10 transition-colors cursor-pointer"
+            title="الإشعارات والتحديثات الحية"
+          >
+            <i class="fa-solid fa-bell text-sm"></i>
+            <span id="unreadNotifsBadge" class="hidden absolute -top-1 -right-1 px-1.5 py-0.2 min-w-[18px] rounded-full bg-rose-500 text-white font-mono font-bold text-[10px] text-center shadow">
+              0
+            </span>
+          </button>
+
+          <!-- زر الخروج -->
+          <button 
+            onclick="handleUserLogout()" 
+            class="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-colors cursor-pointer"
+            title="تسجيل الخروج"
+          >
+            <i class="fa-solid fa-right-from-bracket"></i>
           </button>
         </div>
+
+        <!-- قسم الزائر غير المسجل -->
+        <div id="headerGuestSection" class="flex items-center gap-2">
+          <button 
+            onclick="switchMainView('auth')" 
+            class="btn-gold px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shadow cursor-pointer"
+          >
+            <i class="fa-solid fa-user-lock"></i>
+            <span>تسجيل الدخول</span>
+          </button>
+        </div>
+
       </div>
 
     </div>
   </header>
 
-  <!-- الحاوية الرئيسية للمحتوى -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <!-- ==================== الحاوية الرئيسية للمحتوى ==================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
-    <!-- ==================== 1. شاشة تسجيل جديد ==================== -->
-    <section id="registerView" class="max-w-2xl mx-auto transition-all duration-300">
-      
-      <!-- بطاقة التسجيل الفخمة -->
-      <div class="glass-card rounded-3xl p-6 sm:p-10 border border-amber-500/20 shadow-2xl relative overflow-hidden">
+    <!-- ==================== 1. شاشة تسجيل الدخول وإنشاء حساب جامعة ==================== -->
+    <section id="authView" class="max-w-md mx-auto py-6 transition-all duration-300">
+      <div class="glass-card p-6 sm:p-8 shadow-xl">
         
-        <!-- زخرفة خلفية -->
-        <div class="absolute -top-24 -left-24 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div class="absolute -bottom-24 -right-24 w-60 h-60 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <!-- ترويسة النموذج -->
-        <div class="text-center mb-8">
-          <div class="inline-flex p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 mb-3">
-            <i class="fa-solid fa-id-card text-2xl"></i>
+        <div class="text-center mb-6">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center text-2xl mb-3 shadow">
+            <i class="fa-solid fa-graduation-cap"></i>
           </div>
-          <h2 class="text-2xl sm:text-3xl font-extrabold text-white">تسجيل مسؤول شئون طلاب جديد</h2>
-          <p class="text-slate-400 text-sm mt-2">سجّل بيانات مسؤول الجامعة للربط المباشر وإرسال طلبات سحب ملفات الطلاب</p>
+          <h2 class="text-xl sm:text-2xl font-black text-white">منظومة شئون طلاب الجامعات</h2>
+          <p class="text-slate-400 text-xs mt-1">سجل الدخول بحساب جامعتك لمتابعة وسحب ملفات الطلاب</p>
         </div>
 
-        <!-- نموذج الإدخال -->
-        <form id="registrationForm" onsubmit="handleFormSubmit(event)" class="space-y-6">
+        <!-- أزرار التبديل بين الدخول والتسجيل للجامعة -->
+        <div class="grid grid-cols-2 p-1 bg-slate-900/90 rounded-xl border border-white/10 mb-5">
+          <button 
+            id="tabLoginBtn" 
+            onclick="switchAuthTab('login')" 
+            class="py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 cursor-pointer"
+          >
+            <i class="fa-solid fa-right-to-bracket"></i>
+            <span>تسجيل الدخول</span>
+          </button>
           
-          <!-- حقل الاسم ثلاثي -->
+          <button 
+            id="tabRegisterBtn" 
+            onclick="switchAuthTab('register')" 
+            class="py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <i class="fa-solid fa-building-columns"></i>
+            <span>تسجيل حساب جامعة جديد</span>
+          </button>
+        </div>
+
+        <!-- 1.1 نموذج تسجيل الدخول -->
+        <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
           <div>
-            <label class="block text-sm font-semibold text-slate-200 mb-2 flex items-center justify-between">
-              <span class="flex items-center gap-2">
-                <i class="fa-solid fa-user text-amber-400"></i>
-                الاسم ثلاثي
-              </span>
-              <span class="text-xs text-slate-400">يجب أن يتكون من 3 مقاطع على الأقل</span>
-            </label>
-            <div class="relative">
-              <input 
-                type="text" 
-                id="fullNameInput" 
-                required 
-                placeholder="اكتب الاسم ثلاثي..." 
-                class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-slate-100 placeholder-slate-500 text-base"
-                autocomplete="off"
-              >
-              <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
-                <i class="fa-solid fa-signature"></i>
-              </div>
-            </div>
-            <p id="fullNameError" class="text-rose-400 text-xs mt-1.5 hidden flex items-center gap-1">
-              <i class="fa-solid fa-circle-exclamation"></i>
-              <span>يرجى كتابة الاسم الثلاثي بالكامل (3 مقاطع على الأقل)</span>
-            </p>
+            <label class="block text-xs font-bold text-slate-200 mb-1.5">اسم الجامعة أو رقم الموبايل</label>
+            <input 
+              type="text" 
+              id="loginPhoneInput" 
+              list="universitiesList" 
+              required 
+              placeholder="اكتب اسم الجامعة أو رقم الموبايل..." 
+              class="glass-input w-full px-4 py-3 rounded-xl text-slate-100 placeholder-slate-500 text-sm font-medium"
+              autocomplete="username"
+            >
+            <p id="loginPhoneError" class="text-rose-400 text-xs mt-1 hidden">يرجى إدخال اسم الجامعة أو رقم الموبايل المسجل</p>
           </div>
 
-          <!-- حقل رقم الموبايل الذكي -->
           <div>
-            <label class="block text-sm font-semibold text-slate-200 mb-2 flex items-center justify-between">
-              <span class="flex items-center gap-2">
-                <i class="fa-solid fa-phone text-emerald-400"></i>
-                رقم الموبايل (واتساب)
-              </span>
-              <span class="text-xs text-emerald-400 font-mono">010 / 011 / 012 / 015</span>
-            </label>
+            <label class="block text-xs font-bold text-slate-200 mb-1.5">كلمة المرور</label>
+            <input 
+              type="password" 
+              id="loginPasswordInput" 
+              required 
+              placeholder="••••••••" 
+              class="glass-input w-full px-4 py-3 rounded-xl text-slate-100 placeholder-slate-500 text-sm"
+              autocomplete="current-password"
+            >
+          </div>
+
+          <button 
+            type="submit" 
+            id="loginSubmitBtn"
+            class="btn-gold w-full py-3 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-pointer mt-2"
+          >
+            <i class="fa-solid fa-right-to-bracket"></i>
+            <span>دخول إلى حساب الجامعة</span>
+          </button>
+        </form>
+
+        <!-- 1.2 نموذج إنشاء حساب جامعة جديد -->
+        <form id="registerForm" onsubmit="handleRegisterSubmit(event)" class="space-y-3.5 hidden">
+          <div>
+            <label class="block text-xs font-bold text-amber-300 mb-1">اسم الجامعة: <span class="text-rose-400">*</span></label>
+            <input 
+              type="text" 
+              id="registerUniversityInput" 
+              list="universitiesList" 
+              required 
+              placeholder="اختر أو اكتب اسم الجامعة..." 
+              class="glass-input w-full px-3.5 py-2.5 rounded-xl text-slate-100 placeholder-slate-500 text-sm font-bold"
+            >
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-200 mb-1">رقم الموبايل للتواصل والدخول (واتساب): <span class="text-rose-400">*</span></label>
             <div class="relative">
               <input 
                 type="tel" 
-                id="phoneInput" 
+                id="registerPhoneInput" 
                 required 
                 dir="ltr"
                 placeholder="010XXXXXXXX" 
-                class="glass-input w-full px-4 py-3.5 pl-16 rounded-xl text-slate-100 placeholder-slate-500 text-base text-right font-mono"
-                autocomplete="off"
+                class="glass-input w-full px-3.5 py-2.5 pl-14 rounded-xl text-slate-100 placeholder-slate-500 text-sm font-mono text-right"
               >
-              <div class="absolute inset-y-0 left-0 pl-3 flex items-center gap-1.5 pointer-events-none text-xs font-mono font-bold text-slate-400 border-r border-white/10 pr-2 my-2">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-mono font-bold text-slate-400 border-r border-white/10 pr-2 my-2">
                 <span>🇪🇬 +20</span>
               </div>
             </div>
-            <p id="phoneError" class="text-rose-400 text-xs mt-1.5 hidden flex items-center gap-1">
-              <i class="fa-solid fa-circle-exclamation"></i>
-              <span>يرجى إدخال رقم موبايل مصري صحيح مكون من 11 رقم</span>
-            </p>
+            <p id="registerPhoneError" class="text-rose-400 text-[11px] mt-1 hidden">يرجى إدخال رقم موبايل صحيح للتواصل (11 رقماً)</p>
           </div>
 
-          <!-- حقل اختيار أو كتابة الجامعة -->
           <div>
-            <label class="block text-sm font-semibold text-slate-200 mb-2 flex items-center justify-between">
-              <span class="flex items-center gap-2">
-                <i class="fa-solid fa-building-columns text-amber-400"></i>
-                الجامعة
-              </span>
-              <span class="text-xs text-amber-300 font-semibold">اختر من القائمة أو اكتب اسم أي جامعة بحرية (يدوياً)</span>
-            </label>
-            <div class="relative">
-              <input 
-                type="text" 
-                id="universityInput" 
-                list="universitiesList" 
-                required 
-                placeholder="اختر من القائمة أو اكتب اسم الجامعة يدوياً..." 
-                class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-slate-100 placeholder-slate-500 text-base"
-                autocomplete="off"
-              >
-              <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
-                <i class="fa-solid fa-landmark"></i>
-              </div>
-              <datalist id="universitiesList">
-                <!-- يتم ملؤها ديناميكياً من universities-data.js -->
-              </datalist>
-            </div>
-          </div>
-
-          <!-- زر الحفظ والتسجيل -->
-          <div class="pt-3">
-            <button 
-              type="submit" 
-              id="submitBtn"
-              class="btn-gold w-full py-4 px-6 rounded-xl flex items-center justify-center gap-3 text-lg font-extrabold cursor-pointer"
+            <label class="block text-xs font-bold text-slate-200 mb-1">اسم مسؤول التواصل / شئون الطلاب (اختياري)</label>
+            <input 
+              type="text" 
+              id="registerContactPersonInput" 
+              placeholder="اكتب اسم مسؤول التواصل بالجامعة (اختياري)..." 
+              class="glass-input w-full px-3.5 py-2.5 rounded-xl text-slate-100 placeholder-slate-500 text-sm"
             >
-              <i class="fa-solid fa-circle-check text-xl"></i>
-              <span>تسجيل والدخول التلقائي للسجل</span>
-            </button>
-            <p class="text-center text-xs text-slate-400 mt-3 flex items-center justify-center gap-1.5">
-              <i class="fa-solid fa-bolt text-amber-400"></i>
-              <span>سيتم حفظ البيانات فوراً والتحويل التلقائي لشاشة إرسال طلبات السحب للواتس</span>
-            </p>
           </div>
 
+          <div>
+            <label class="block text-xs font-bold text-slate-200 mb-1">كلمة المرور: <span class="text-rose-400">*</span></label>
+            <input 
+              type="password" 
+              id="registerPasswordInput" 
+              required 
+              placeholder="••••••••" 
+              class="glass-input w-full px-3.5 py-2.5 rounded-xl text-slate-100 placeholder-slate-500 text-sm font-mono"
+            >
+          </div>
+
+          <button 
+            type="submit" 
+            id="registerSubmitBtn"
+            class="btn-gold w-full py-3 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-pointer mt-2"
+          >
+            <i class="fa-solid fa-building-circle-check"></i>
+            <span>تسجيل وتفعيل حساب الجامعة</span>
+          </button>
         </form>
 
       </div>
     </section>
 
-    <!-- ==================== 2. شاشة سجل البيانات والدخول (Dashboard) ==================== -->
-    <section id="dashboardView" class="hidden transition-all duration-300 space-y-6">
+    <!-- ==================== 2. لوحة تحكم الجامعة ==================== -->
+    <section id="employeeDashboardView" class="hidden transition-all duration-300 space-y-5">
       
-      <!-- شريط البحث السريع والتحكم العلوي -->
-      <div class="glass-card rounded-2xl p-5 border border-white/10 shadow-xl">
-        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-          
-          <!-- حقل البحث الفوري المباشر -->
-          <div class="w-full md:w-2/3 relative">
-            <input 
-              type="text" 
-              id="searchInput" 
-              oninput="handleSearch(this.value)"
-              onkeyup="handleSearch(this.value)"
-              placeholder="ابحث بالاسم، الموبايل، الجامعة، أو أسماء الطلاب..." 
-              class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-sm sm:text-base text-white placeholder-slate-400"
-            >
-            <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-amber-400 text-lg">
-              <i class="fa-solid fa-magnifying-glass"></i>
-            </div>
-            <!-- زر مسح البحث إذا وُجد نص -->
-            <button 
-              id="clearSearchBtn" 
-              onclick="clearSearch()" 
-              class="hidden absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 hover:text-white"
-              title="مسح البحث"
-            >
-              <i class="fa-solid fa-circle-xmark"></i>
-            </button>
+      <!-- ترويسة ترحيبية للجامعة -->
+      <div class="glass-card p-5 border border-white/10 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+              <span>لوحة تحكم:</span>
+              <span id="dashWelcomeUni" class="text-amber-300 font-black">اسم الجامعة</span>
+            </h2>
           </div>
-
-          <!-- إحصائيات سريعة وأزرار إضافية -->
-          <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-3">
-            <div class="text-xs text-slate-300 bg-slate-800/80 border border-white/10 px-3.5 py-2.5 rounded-xl font-medium flex items-center gap-2">
-              <i class="fa-solid fa-layer-group text-amber-400"></i>
-              <span>النتائج المعروضة:</span>
-              <strong id="filteredCount" class="text-amber-300 font-mono text-sm">0</strong>
-            </div>
-
-            <button onclick="switchView('register')" class="px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-sm font-bold flex items-center gap-2 transition-all">
-              <i class="fa-solid fa-plus"></i>
-              <span class="hidden sm:inline">إضافة جديد</span>
-            </button>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- حاوية السجلات (الجدول للكمبيوتر والبطاقات للموبايل) -->
-      <div id="recordsContainer">
-        <!-- 1. عرض الجدول المنسق بالأعمدة (للشاشات الكبيرة والكمبيوتر فقط) -->
-        <div id="tableViewContainer" class="desktop-only-table glass-card rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-right border-collapse min-w-[1000px]">
-              <thead>
-                <tr class="bg-slate-800/95 text-amber-300 border-b border-amber-500/30 text-xs sm:text-sm font-bold select-none">
-                  <th class="py-4 px-3 w-12 text-center">#</th>
-                  <th class="py-4 px-4 min-w-[180px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-landmark text-amber-400"></i>
-                      الجامعة
-                    </span>
-                  </th>
-                  <th class="py-4 px-4 min-w-[170px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-user-tie text-amber-400"></i>
-                      اسم المسؤول
-                    </span>
-                  </th>
-                  <th class="py-4 px-4 min-w-[140px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-phone text-emerald-400"></i>
-                      رقم الموبايل
-                    </span>
-                  </th>
-                  <th class="py-4 px-4 min-w-[480px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-users text-amber-400"></i>
-                      أسماء الطلاب المراد سحبهم
-                    </span>
-                  </th>
-                  <th class="py-4 px-3 w-28 text-center">
-                    <span class="flex items-center justify-center gap-1">
-                      <i class="fa-brands fa-whatsapp text-emerald-400 text-sm"></i>
-                      <span>واتساب</span>
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody id="recordsTableBody" class="divide-y divide-white/5 text-sm">
-                <!-- يتم توليد صفوف الجدول ديناميكياً هنا -->
-              </tbody>
-            </table>
-          </div>
+          <p class="text-xs text-slate-400 mt-1">
+            <span id="dashWelcomeName" class="text-slate-300 font-semibold">شئون الطلاب</span>
+          </p>
         </div>
 
-        <!-- 2. عرض البطاقات الذكية المستقلة كلياً (للموبايل فقط) -->
-        <div id="mobileCardsContainer" class="mobile-only-cards space-y-4">
-          <!-- يتم توليد كروت الموبايل ديناميكياً هنا -->
-        </div>
-      </div>
-
-      <!-- في حالة عدم وجود أي نتائج -->
-      <div id="emptyState" class="hidden glass-panel rounded-3xl p-12 text-center border border-white/10">
-        <div class="w-20 h-20 mx-auto rounded-full bg-slate-800/90 border border-white/10 flex items-center justify-center text-3xl text-amber-400 mb-4 shadow-inner">
-          <i class="fa-solid fa-folder-open"></i>
-        </div>
-        <h3 class="text-xl font-bold text-white mb-1">لا توجد سجلات مطابقة</h3>
-        <p class="text-slate-400 text-sm max-w-md mx-auto mb-6">لم يتم العثور على أي نتائج تطابق عملية البحث، أو أنه لم يتم تسجيل أي ممثل جامعة بعد.</p>
-        <button onclick="switchView('register')" class="btn-gold px-6 py-2.5 rounded-xl text-sm font-bold inline-flex items-center gap-2">
-          <i class="fa-solid fa-user-plus"></i>
-          <span>تسجيل أول مسؤول الآن</span>
+        <button 
+          onclick="switchDashTab('new_request')" 
+          class="btn-gold px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow hover:scale-102 transition-transform"
+        >
+          <i class="fa-solid fa-paper-plane"></i>
+          <span>إرسال كشف جديد ➕</span>
         </button>
       </div>
 
-    </section>
-
-    <!-- ==================== 3. شاشة لوحة تحكم الإدارة (Admin Dashboard) ==================== -->
-    <section id="adminView" class="hidden transition-all duration-300 space-y-6">
-      
-      <!-- ترويسة لوحة الإدارة والأزرار السريعة -->
-      <div class="glass-card rounded-3xl p-6 sm:p-8 border border-amber-500/30 shadow-2xl relative overflow-hidden">
-        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          
-          <!-- العنوان وشارة الصلاحيات -->
-          <div class="flex items-center gap-4">
-            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-200 text-slate-950 flex items-center justify-center text-2xl shadow-xl shadow-amber-500/20">
-              <i class="fa-solid fa-shield-halved"></i>
-            </div>
-            <div>
-              <div class="flex items-center gap-2 mb-1">
-                <h2 class="text-xl sm:text-2xl font-black text-white tracking-wide">
-                  لوحة التحكم والرقابة الشاملة
-                </h2>
-                <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold font-mono">
-                  ADMIN 8520
-                </span>
-              </div>
-              <p class="text-xs sm:text-sm text-slate-300">
-                التحكم المركزي الكامل في كافة السجلات، تعديل البيانات، إدارة الحذف، واستعراض إحصائيات النظام لحظياً
-              </p>
-            </div>
+      <!-- 3 كروت مؤشرات واضحة ومحددة -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        
+        <!-- كرت 1: الكشوف الواردة لجامعتي -->
+        <div class="glass-card p-4 border border-white/10 shadow flex items-center justify-between">
+          <div>
+            <p class="text-xs text-slate-400 font-semibold mb-1">كشوف واردة لجامعتي</p>
+            <h3 id="statIncomingRequests" class="text-2xl font-black text-amber-400 font-mono">0</h3>
+            <span class="text-[11px] text-slate-400">طلبات سحب ملفات من جامعتنا</span>
           </div>
-
-          <!-- الأزرار السريعة -->
-          <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <!-- تصدير ملف Excel -->
-            <button 
-              onclick="exportAdminDataToExcel()" 
-              class="btn-whatsapp px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-lg hover:scale-105 transition-all"
-              title="تصدير تقرير شامل إلى ملف Excel (CSV)"
-            >
-              <i class="fa-solid fa-file-excel text-base"></i>
-              <span>تصدير Excel 📊</span>
-            </button>
-
-            <!-- إضافة مسؤول جديد من الإدارة -->
-            <button 
-              onclick="openAdminAddModal()" 
-              class="btn-gold px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-lg hover:scale-105 transition-all"
-              title="إضافة مسؤول جامعة جديد فوراً"
-            >
-              <i class="fa-solid fa-user-plus text-base"></i>
-              <span>إضافة مسؤول ➕</span>
-            </button>
-
-            <!-- تسجيل الخروج من الإدارة -->
-            <button 
-              onclick="exitAdminView()" 
-              class="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
-              title="العودة إلى السجل العام"
-            >
-              <i class="fa-solid fa-right-from-bracket"></i>
-              <span>خروج من الإدارة 🚪</span>
-            </button>
+          <div class="w-11 h-11 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-inbox"></i>
           </div>
-
         </div>
+
+        <!-- كرت 2: طلاب مطلوب سحبهم من جامعتنا -->
+        <div class="glass-card p-4 border border-white/10 shadow flex items-center justify-between">
+          <div>
+            <p class="text-xs text-slate-400 font-semibold mb-1">طلاب مطلوب سحبهم</p>
+            <div class="flex items-baseline gap-2">
+              <h3 id="statIncomingStudents" class="text-2xl font-black text-white font-mono">0</h3>
+              <span id="statCompletedPercent" class="text-xs text-emerald-400 font-bold font-mono">0% تم سحبهم</span>
+            </div>
+            <span class="text-[11px] text-slate-400">إجمالي الطلاب بالكشوف الواردة</span>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-users"></i>
+          </div>
+        </div>
+
+        <!-- كرت 3: كشوف صادرة مني للجامعات الأخرى -->
+        <div class="glass-card p-4 border border-white/10 shadow flex items-center justify-between">
+          <div>
+            <p class="text-xs text-slate-400 font-semibold mb-1">كشوف صادرة مني</p>
+            <h3 id="statOutgoingRequests" class="text-2xl font-black text-blue-400 font-mono">0</h3>
+            <span class="text-[11px] text-slate-400">كشوف أرسلتها وأتابع سحبها</span>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-paper-plane"></i>
+          </div>
+        </div>
+
       </div>
 
-      <!-- كروت المؤشرات والإحصائيات الشاملة (KPI Cards) -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <!-- 3 تبويبات رئيسية واضحة فقط -->
+      <div class="bg-slate-900/90 p-1.5 rounded-2xl border border-white/10 flex items-center gap-1.5 shadow">
+        <button 
+          id="tabBtnIncoming" 
+          onclick="switchDashTab('incoming')" 
+          class="dash-tab-btn active flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <i class="fa-solid fa-inbox text-amber-400"></i>
+          <span>الكشوف الواردة لجامعتي</span>
+          <span id="incomingBadgeCounter" class="bg-amber-500/20 text-amber-300 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">0</span>
+        </button>
+
+        <button 
+          id="tabBtnNewRequest" 
+          onclick="switchDashTab('new_request')" 
+          class="dash-tab-btn flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <i class="fa-solid fa-paper-plane text-emerald-400"></i>
+          <span>إرسال كشف سحب جديد</span>
+        </button>
+
+        <button 
+          id="tabBtnOutgoing" 
+          onclick="switchDashTab('outgoing')" 
+          class="dash-tab-btn flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <i class="fa-solid fa-list-check text-blue-400"></i>
+          <span>متابعة كشوفاتي الصادرة</span>
+          <span id="outgoingBadgeCounter" class="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">0</span>
+        </button>
+      </div>
+
+      <!-- ==================== التبويب 1: الكشوف الواردة لجامعتي ==================== -->
+      <div id="subViewIncoming" class="space-y-4">
         
-        <!-- كرت 1: إجمالي الجامعات -->
-        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-slate-400 font-semibold mb-1">إجمالي الجامعات</p>
-              <h3 id="adminStatUniversities" class="text-3xl font-black text-white font-mono">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xl">
-              <i class="fa-solid fa-landmark"></i>
-            </div>
-          </div>
-          <div class="mt-3 text-[11px] text-amber-300/80 font-medium">الجامعات المسجلة بالمنظومة</div>
-        </div>
-
-        <!-- كرت 2: إجمالي المسؤولين -->
-        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-slate-400 font-semibold mb-1">المسؤولين المسجلين</p>
-              <h3 id="adminStatRepresentatives" class="text-3xl font-black text-white font-mono">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-2xl bg-blue-500/15 text-blue-400 border border-blue-500/20 flex items-center justify-center text-xl">
-              <i class="fa-solid fa-users-gear"></i>
+        <!-- شريط البحث والتحكم في الكشوف الواردة -->
+        <div class="glass-card p-3.5 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 shadow">
+          <div class="w-full sm:w-2/3 relative">
+            <input 
+              type="text" 
+              id="incomingSearchInput" 
+              oninput="handleIncomingSearch(this.value)"
+              placeholder="🔍 ابحث في الكشوف الواردة (اسم الطالب، الجامعة المرسلة)..." 
+              class="glass-input w-full px-4 py-2.5 pr-10 rounded-xl text-xs sm:text-sm text-white placeholder-slate-400"
+            >
+            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-amber-400">
+              <i class="fa-solid fa-magnifying-glass"></i>
             </div>
           </div>
-          <div class="mt-3 text-[11px] text-blue-300/80 font-medium">مسؤولو شئون الطلاب المعتمدين</div>
-        </div>
-
-        <!-- كرت 3: إجمالي الطلاب المطلوب سحبهم -->
-        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-slate-400 font-semibold mb-1">إجمالي طلبات السحب</p>
-              <h3 id="adminStatStudents" class="text-3xl font-black text-white font-mono text-emerald-400">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl">
-              <i class="fa-solid fa-user-graduate"></i>
+          
+          <div class="flex items-center gap-2 justify-between sm:justify-end w-full sm:w-auto">
+            <span class="text-xs text-slate-400">الكشوف: <strong id="incomingCountDisplay" class="text-white font-mono">0</strong></span>
+            <div class="flex items-center gap-1.5">
+              <button 
+                type="button" 
+                onclick="expandAllIncomingRequests()" 
+                class="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 text-xs font-bold transition-colors cursor-pointer"
+              >
+                تمديد الكل ➕
+              </button>
+              <button 
+                type="button" 
+                onclick="collapseAllIncomingRequests()" 
+                class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-xs font-bold transition-colors cursor-pointer"
+              >
+                طي الكل ➖
+              </button>
             </div>
           </div>
-          <div class="mt-3 text-[11px] text-emerald-300/80 font-medium">إجمالي الطلاب المطلوب سحبهم حالياً</div>
         </div>
 
-        <!-- كرت 4: جامعات لديها طلبات حالية -->
-        <div class="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden shadow-lg">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-slate-400 font-semibold mb-1">جامعات بها طلبات</p>
-              <h3 id="adminStatActiveUnis" class="text-3xl font-black text-white font-mono text-amber-300">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-2xl bg-purple-500/15 text-purple-400 border border-purple-500/20 flex items-center justify-center text-xl">
+        <!-- حاوية الكشوف الواردة المتقلصة -->
+        <div id="incomingRequestsContainer" class="space-y-4">
+          <!-- كروت الكشوف الواردة ديناميكياً -->
+        </div>
+
+        <!-- حالة فارغة -->
+        <div id="incomingEmptyState" class="hidden glass-card p-10 text-center border border-white/10">
+          <div class="w-16 h-16 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-2xl text-amber-400 mb-3">
+            <i class="fa-solid fa-inbox"></i>
+          </div>
+          <h3 class="text-base font-bold text-white mb-1">لا توجد كشوف واردة لجامعتك حالياً</h3>
+          <p class="text-slate-400 text-xs">عند إرسال أي جامعة كشفاً لسحب ملفات طلاب من جامعتك، سيظهر هنا فوراً.</p>
+        </div>
+
+      </div>
+
+      <!-- ==================== التبويب 2: إرسال كشف سحب جديد (مبسط ومباشر) ==================== -->
+      <div id="subViewNewRequest" class="hidden max-w-2xl mx-auto space-y-5">
+        
+        <div class="glass-card p-6 sm:p-8 shadow-xl">
+          
+          <div class="border-b border-white/10 pb-4 mb-5 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xl">
               <i class="fa-solid fa-paper-plane"></i>
             </div>
+            <div>
+              <h3 class="text-base sm:text-lg font-bold text-white">إرسال كشف سحب طلاب لجامعة أخرى</h3>
+              <p class="text-xs text-slate-400">اختر الجامعة وألصق أسماء الطلاب ليصل الكشف مباشرة لمسؤول الجامعة</p>
+            </div>
           </div>
-          <div class="mt-3 text-[11px] text-purple-300/80 font-medium">جامعات لديها أسماء قيد المتابعة</div>
+
+          <form id="newWithdrawalRequestForm" onsubmit="handleCreateRequestSubmit(event)" class="space-y-5">
+            
+            <!-- 1. اختيار الجامعة المستهدفة -->
+            <div>
+              <label class="block text-xs sm:text-sm font-bold text-slate-200 mb-1.5">
+                الجامعة المراد سحب الملفات منها
+              </label>
+              <div class="relative">
+                <input 
+                  type="text" 
+                  id="targetUniversityInput" 
+                  list="universitiesList" 
+                  required 
+                  oninput="handleTargetUniversityChanged(this.value)"
+                  onchange="handleTargetUniversityChanged(this.value)"
+                  placeholder="اختر أو اكتب اسم الجامعة..." 
+                  class="glass-input w-full px-4 py-3 rounded-xl text-slate-100 placeholder-slate-500 text-sm"
+                  autocomplete="off"
+                >
+                <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                  <i class="fa-solid fa-building-columns"></i>
+                </div>
+              </div>
+
+              <!-- بطاقة تظهر فوراً أسفل حقل الجامعة: اسم المسؤول ورقم تليفونه -->
+              <div id="targetRepInfoBox" class="hidden mt-3 p-3.5 rounded-xl bg-slate-900/90 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div>
+                  <div class="text-amber-300 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-tie"></i>
+                    <span>مسؤول الجامعة: <strong id="targetRepName" class="text-white"></strong></span>
+                  </div>
+                  <div class="text-slate-300 mt-1 flex items-center gap-1 font-mono">
+                    <i class="fa-solid fa-phone text-emerald-400 text-[10px]"></i>
+                    <span id="targetRepPhone" dir="ltr"></span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1 sm:pt-0">
+                  <a id="targetRepCallLink" href="#" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200 hover:text-white border border-white/10 flex items-center gap-1 text-[11px]">
+                    <i class="fa-solid fa-phone text-xs"></i> اتصال
+                  </a>
+                  <a id="targetRepWaLink" href="#" target="_blank" class="px-2.5 py-1 rounded-lg bg-emerald-600/30 text-emerald-300 hover:text-white border border-emerald-500/40 flex items-center gap-1 text-[11px]">
+                    <i class="fa-brands fa-whatsapp text-xs"></i> واتساب
+                  </a>
+                </div>
+              </div>
+
+              <div id="targetRepNotFoundBox" class="hidden mt-2 p-2.5 rounded-xl bg-slate-800/60 text-slate-400 text-xs">
+                <i class="fa-solid fa-circle-info text-amber-400 ml-1"></i> لم يتم تسجيل مسؤول معتمد لهذه الجامعة بعد، يمكنك إرسال الكشف وسيصل فور تسجيله.
+              </div>
+            </div>
+
+            <!-- 2. مساحة أسماء الطلاب -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs sm:text-sm font-bold text-slate-200">
+                  أسماء الطلاب المراد سحب ملفاتهم
+                </label>
+                <div class="flex items-center gap-2">
+                  <span id="requestStudentsCountBadge" class="px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-white/10 font-mono text-xs font-bold">
+                    0 طلاب
+                  </span>
+                  <button 
+                    type="button" 
+                    onclick="clearNewRequestStudents()" 
+                    class="px-2 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-xs cursor-pointer"
+                  >
+                    تفريغ
+                  </button>
+                </div>
+              </div>
+
+              <textarea 
+                id="requestStudentsTextarea" 
+                rows="6" 
+                required 
+                oninput="onRequestStudentsInputChanged(this.value)"
+                placeholder="ألصق أو اكتب أسماء الطلاب هنا (طالب في كل سطر)..." 
+                class="students-textarea glass-input w-full p-3.5 rounded-xl text-sm text-slate-100 placeholder-slate-500 leading-relaxed font-sans"
+              ></textarea>
+              <p class="text-[11px] text-amber-300/90 font-medium mt-1.5 flex items-start gap-1.5">
+                <i class="fa-solid fa-file-excel mt-0.5"></i>
+                <span>
+                  <strong>الصق مباشرة من ملف الإكسيل</strong> — كل سطر فيه اسم الطالب وبجانبه الرقم القومي (عمودين)؛
+                  النظام يتعرّف على الرقم القومي بجانب الاسم تلقائياً ويضعه في عمود منفصل بدون أي فصل يدوي.
+                </span>
+              </p>
+              <div id="requestStudentsPreview" class="hidden mt-3"></div>
+            </div>
+
+            <!-- أزرار الإرسال -->
+            <div class="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button 
+                type="submit" 
+                id="submitRequestBtn"
+                class="btn-gold py-3 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow"
+              >
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span>إرسال الكشف في المنظومة 🚀</span>
+              </button>
+
+              <button 
+                type="button" 
+                onclick="sendNewRequestViaWhatsApp()" 
+                class="btn-whatsapp py-3 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow"
+              >
+                <i class="fa-brands fa-whatsapp text-base"></i>
+                <span>إرسال عبر الواتساب الرسمي 📲</span>
+              </button>
+            </div>
+
+          </form>
+
         </div>
 
       </div>
 
-      <!-- شريط البحث السريع للإدارة والفلترة -->
-      <div class="glass-card rounded-2xl p-4 border border-white/10 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="w-full md:w-2/3 relative">
-          <input 
-            type="text" 
-            id="adminSearchInput" 
-            oninput="handleAdminSearch(this.value)"
-            onkeyup="handleAdminSearch(this.value)"
-            placeholder="🔍 بحث إداري شامل بأي معلومة (الاسم، الجامعة، الهاتف، أو أسماء الطلاب)..." 
-            class="glass-input w-full px-5 py-3.5 pr-12 rounded-xl text-sm sm:text-base text-white placeholder-slate-400"
-          >
-          <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-amber-400 text-lg">
-            <i class="fa-solid fa-magnifying-glass"></i>
+      <!-- ==================== التبويب 3: متابعة كشوفاتي الصادرة ==================== -->
+      <div id="subViewOutgoing" class="space-y-4 hidden">
+        
+        <div class="glass-card p-3.5 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 shadow">
+          <div class="w-full sm:w-2/3 relative">
+            <input 
+              type="text" 
+              id="outgoingSearchInput" 
+              oninput="handleOutgoingSearch(this.value)"
+              placeholder="🔍 ابحث في كشوفاتك الصادرة (اسم الجامعة، اسم الطالب)..." 
+              class="glass-input w-full px-4 py-2.5 pr-10 rounded-xl text-xs sm:text-sm text-white placeholder-slate-400"
+            >
+            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-blue-400">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+          </div>
+          <span class="text-xs text-slate-400">كشوفاتي الصادرة: <strong id="outgoingCountDisplay" class="text-white font-mono">0</strong></span>
+          <div class="flex items-center gap-1.5">
+            <button 
+              type="button" 
+              onclick="expandAllOutgoingRequests()" 
+              class="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/25 text-xs font-bold transition-colors cursor-pointer"
+            >
+              تمديد الكل ➕
+            </button>
+            <button 
+              type="button" 
+              onclick="collapseAllOutgoingRequests()" 
+              class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-xs font-bold transition-colors cursor-pointer"
+            >
+              طي الكل ➖
+            </button>
           </div>
         </div>
 
-        <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-3 text-xs text-slate-300 bg-slate-800/80 border border-white/10 px-4 py-3 rounded-xl font-medium">
-          <i class="fa-solid fa-list-check text-amber-400"></i>
-          <span>السجلات المطابقة:</span>
-          <strong id="adminFilteredCount" class="text-amber-300 font-mono text-sm">0</strong>
+        <div id="outgoingRequestsContainer" class="space-y-4">
+          <!-- كروت الكشوف الصادرة ديناميكياً -->
         </div>
-      </div>
 
-      <!-- حاوية سجلات الإدارة (الجدول للكمبيوتر والبطاقات للموبايل) -->
-      <div id="adminRecordsContainer">
-        <!-- جدول الإدارة الشامل بكافة الصلاحيات (للشاشات الكبيرة والكمبيوتر فقط) -->
-        <div id="adminTableContainer" class="desktop-only-table glass-card rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-right border-collapse">
-              <thead>
-                <tr class="table-header-row text-xs uppercase tracking-wider font-bold">
-                  <th class="py-4 px-3 text-center w-12">#</th>
-                  <th class="py-4 px-4 min-w-[170px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-landmark text-amber-400"></i>
-                      الجامعة
-                    </span>
-                  </th>
-                  <th class="py-4 px-4 min-w-[170px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-user-tie text-amber-400"></i>
-                      اسم المسؤول
-                    </span>
-                  </th>
-                  <th class="py-4 px-4 min-w-[140px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-phone text-emerald-400"></i>
-                      رقم الموبايل
-                    </span>
-                  </th>
-                  <th class="py-4 px-3 text-center min-w-[110px]">
-                    <span class="flex items-center justify-center gap-1.5">
-                      <i class="fa-solid fa-users text-amber-400"></i>
-                      عدد الطلاب
-                    </span>
-                  </th>
-                  <th class="py-4 px-4 min-w-[320px]">
-                    <span class="flex items-center gap-1.5">
-                      <i class="fa-solid fa-list-ol text-blue-400"></i>
-                      أسماء الطلاب المراد سحبهم
-                    </span>
-                  </th>
-                  <th class="py-4 px-4 text-center min-w-[200px]">
-                    <span class="flex items-center justify-center gap-1.5">
-                      <i class="fa-solid fa-sliders text-amber-400"></i>
-                      لوحة التحكم والإجراءات
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody id="adminTableBody" class="divide-y divide-white/5 text-sm">
-                <!-- يتم توليد الصفوف الإدارية ديناميكياً هنا -->
-              </tbody>
-            </table>
+        <div id="outgoingEmptyState" class="hidden glass-card p-10 text-center border border-white/10">
+          <div class="w-16 h-16 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-2xl text-blue-400 mb-3">
+            <i class="fa-solid fa-paper-plane"></i>
           </div>
+          <h3 class="text-base font-bold text-white mb-1">لم تقم بإرسال أي كشوفات بعد</h3>
+          <p class="text-slate-400 text-xs mb-4">أرسل كشف سحب طلاب لجامعة أخرى لمتابعة حالة السحب والملاحظات لحظياً.</p>
+          <button onclick="switchDashTab('new_request')" class="btn-gold px-5 py-2 rounded-xl font-bold text-xs inline-flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> إرسال كشف جديد
+          </button>
         </div>
 
-        <!-- كروت الإدارة المستقلة كلياً (للموبايل فقط) -->
-        <div id="adminMobileContainer" class="mobile-only-cards space-y-4">
-          <!-- يتم توليد كروت إدارة الموبايل ديناميكياً هنا -->
-        </div>
-      </div>
-
-      <!-- في حالة عدم وجود نتائج في بحث الإدارة -->
-      <div id="adminEmptyState" class="hidden glass-panel rounded-3xl p-12 text-center border border-white/10">
-        <div class="w-16 h-16 mx-auto rounded-full bg-slate-800/90 border border-white/10 flex items-center justify-center text-2xl text-amber-400 mb-3 shadow-inner">
-          <i class="fa-solid fa-filter-circle-xmark"></i>
-        </div>
-        <h3 class="text-lg font-bold text-white mb-1">لا توجد سجلات مطابقة في الإدارة</h3>
-        <p class="text-slate-400 text-xs max-w-sm mx-auto">لم يتم العثور على أي نتائج تطابق عملية البحث الإداري.</p>
       </div>
 
     </section>
@@ -538,247 +589,88 @@
   </main>
 
   <!-- ==================== الفوتر الرسمي ==================== -->
-  <footer class="mt-auto glass-panel border-t border-amber-500/20 py-5">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-right">
-      
-      <!-- توقيع المهندس بولس سمير -->
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-          <i class="fa-solid fa-laptop-code text-lg"></i>
-        </div>
-        <div>
-          <p class="text-sm font-bold text-white tracking-wide">
-            تصميم: <span class="gold-gradient-text font-black text-base">مهندس بولس سمير</span>
-          </p>
-          <p class="text-xs text-amber-300/80 font-medium">
-            مدير شئون الطلاب - جامعة اللوتس
-          </p>
-        </div>
-      </div>
+  <footer class="mt-auto glass-panel border-t border-white/10 py-3.5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-right">
+      <p class="text-xs font-bold text-white">
+        تصميم وبرمجة: <span class="text-amber-300 font-black">مهندس بولس سمير</span> — مدير شئون الطلاب جامعة اللوتس بالمنيا
+      </p>
+      <div class="text-[11px] text-slate-400 font-mono">
 
+      </div>
     </div>
   </footer>
 
-  <!-- ==================== نافذة التحقق من كلمة مرور الإدارة ==================== -->
-  <div id="adminAuthModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-all duration-300">
-    <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full border border-amber-500/30 shadow-2xl relative">
-      <div class="text-center mb-6">
-        <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-3xl mb-4 shadow-lg shadow-amber-500/20">
-          <i class="fa-solid fa-lock"></i>
+  <!-- ==================== نافذة الإشعارات الحية ==================== -->
+  <div id="notificationsModal" class="fixed inset-0 z-50 flex items-start justify-end p-4 bg-slate-950/70 backdrop-blur-sm hidden transition-all">
+    <div class="glass-card notifications-panel rounded-2xl p-5 max-w-md w-full border border-amber-500/30 shadow-2xl relative mt-16 max-h-[80vh] flex flex-col">
+      
+      <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-bell text-amber-400"></i>
+          <h3 class="text-sm font-bold text-white">الإشعارات والتحديثات الحية</h3>
         </div>
-        <h3 class="text-xl font-extrabold text-white mb-1">لوحة تحكم الإدارة المركزية</h3>
-        <p class="text-xs text-slate-300">أدخل الرقم السري المعتمد للدخول إلى لوحة التحكم والرقابة</p>
+        <div class="flex items-center gap-2">
+          <button onclick="markAllNotifsAsRead()" class="text-[11px] text-amber-300 hover:underline">تحديد الكل كمقروء</button>
+          <button onclick="toggleNotificationsModal()" class="text-slate-400 hover:text-white p-1">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
       </div>
 
-      <div class="space-y-4">
-        <div>
-          <label class="block text-xs font-bold text-slate-200 mb-2">كلمة المرور السرية</label>
-          <div class="relative">
-            <input 
-              type="password" 
-              id="adminPasswordInput" 
-              placeholder="••••" 
-              maxlength="10"
-              onkeyup="if(event.key === 'Enter') submitAdminPassword()"
-              class="glass-input w-full px-4 py-3.5 pr-11 rounded-xl text-center text-xl tracking-widest font-mono text-white placeholder-slate-500"
-              autocomplete="off"
-            >
-            <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-amber-400">
-              <i class="fa-solid fa-key"></i>
-            </div>
-          </div>
-          <p id="adminPasswordError" class="text-rose-400 text-xs mt-2 hidden text-center font-bold">
-            <i class="fa-solid fa-circle-exclamation ml-1"></i> كلمة المرور غير صحيحة، يرجى المحاولة مرة أخرى
-          </p>
-        </div>
+      <div id="notificationsListContainer" class="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+        <!-- الإشعارات ديناميكياً -->
+      </div>
 
-        <div class="flex items-center gap-3 pt-2">
-          <button 
-            onclick="submitAdminPassword()" 
-            class="btn-gold flex-1 py-3 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg"
-          >
-            <i class="fa-solid fa-right-to-bracket"></i>
-            <span>تأكيد الدخول</span>
+      <div id="notificationsEmptyState" class="hidden py-8 text-center text-xs text-slate-400">
+        لا توجد إشعارات جديدة حالياً
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== نافذة معاينة وطباعة الكشف (بدون أي توقيعات) ==================== -->
+  <div id="printReportModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-all">
+    <div class="glass-card rounded-2xl p-6 max-w-2xl w-full border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto bg-slate-900">
+      
+      <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-4 no-print">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-print text-amber-400"></i>
+          <span>معاينة الطباعة الرسمية للكشف</span>
+        </h3>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="btn-gold px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-print"></i> طباعة الآن
           </button>
-          <button 
-            onclick="closeAdminAuthModal()" 
-            class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 font-bold text-sm cursor-pointer transition-colors"
-          >
-            إلغاء
+          <button onclick="closePrintModal()" class="text-slate-400 hover:text-white p-1 cursor-pointer">
+            <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
+      </div>
+
+      <!-- محتوى الكشف القابل للطباعة: بدون أي توقيعات في الأسفل -->
+      <div id="printSheetContainer" class="bg-white text-slate-950 p-6 rounded-xl font-sans printable-report">
+        <!-- محتوى الجدول والبيانات فقط بدون توقيعات -->
       </div>
     </div>
   </div>
 
-  <!-- ==================== نافذة تعديل بيانات المسؤول من الإدارة ==================== -->
-  <div id="adminEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-all duration-300">
-    <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-xl w-full border border-amber-500/30 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
-        <div class="flex items-center gap-3">
-          <span class="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-            <i class="fa-solid fa-user-pen text-lg"></i>
-          </span>
-          <h3 class="text-lg font-black text-white">تعديل بيانات المسؤول والطلاب</h3>
-        </div>
-        <button onclick="closeAdminEditModal()" class="text-slate-400 hover:text-white p-2 text-lg cursor-pointer">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <form id="adminEditForm" onsubmit="handleAdminEditSubmit(event)" class="space-y-4">
-        <input type="hidden" id="editRepId">
-
-        <div>
-          <label class="block text-xs font-bold text-slate-200 mb-1.5">اسم المسؤول ثلاثي</label>
-          <input 
-            type="text" 
-            id="editFullNameInput" 
-            required 
-            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
-          >
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-200 mb-1.5">رقم الموبايل</label>
-          <input 
-            type="tel" 
-            id="editPhoneInput" 
-            required 
-            dir="ltr"
-            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white text-right font-mono"
-          >
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-200 mb-1.5">اسم الجامعة</label>
-          <input 
-            type="text" 
-            id="editUniversityInput" 
-            list="universitiesList" 
-            required 
-            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
-          >
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="text-xs font-bold text-slate-200">أسماء الطلاب المراد سحبهم</label>
-            <span class="text-[11px] text-amber-300/80">طالب في كل سطر</span>
-          </div>
-          <textarea 
-            id="editStudentsInput" 
-            rows="5"
-            placeholder="اكتب أو ألصق أسماء الطلاب هنا..."
-            class="students-textarea glass-input w-full p-3.5 rounded-xl text-sm text-white min-h-[120px]"
-          ></textarea>
-        </div>
-
-        <div class="flex items-center gap-3 pt-4 border-t border-white/10">
-          <button 
-            type="submit" 
-            id="saveEditBtn"
-            class="btn-gold flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg"
-          >
-            <i class="fa-solid fa-floppy-disk"></i>
-            <span>حفظ التعديلات في السحابة</span>
-          </button>
-          <button 
-            type="button" 
-            onclick="closeAdminEditModal()" 
-            class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 font-bold text-sm cursor-pointer"
-          >
-            إلغاء
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- ==================== نافذة إضافة مسؤول جديد من الإدارة ==================== -->
-  <div id="adminAddModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-all duration-300">
-    <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-amber-500/30 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
-        <div class="flex items-center gap-3">
-          <span class="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-            <i class="fa-solid fa-user-plus text-lg"></i>
-          </span>
-          <h3 class="text-lg font-black text-white">إضافة مسؤول جامعة جديد</h3>
-        </div>
-        <button onclick="closeAdminAddModal()" class="text-slate-400 hover:text-white p-2 text-lg cursor-pointer">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <form id="adminAddForm" onsubmit="handleAdminAddSubmit(event)" class="space-y-4">
-        <div>
-          <label class="block text-xs font-bold text-slate-200 mb-1.5">الاسم ثلاثي</label>
-          <input 
-            type="text" 
-            id="adminNewFullName" 
-            required 
-            placeholder="اكتب الاسم ثلاثي..."
-            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
-          >
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-200 mb-1.5">رقم الموبايل (مصر)</label>
-          <input 
-            type="tel" 
-            id="adminNewPhone" 
-            required 
-            dir="ltr"
-            placeholder="010XXXXXXXX"
-            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white text-right font-mono"
-          >
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-200 mb-1.5">اسم الجامعة</label>
-          <input 
-            type="text" 
-            id="adminNewUniversity" 
-            list="universitiesList" 
-            required 
-            placeholder="اختر أو اكتب اسم الجامعة يدوياً..."
-            class="glass-input w-full px-4 py-3 rounded-xl text-sm text-white"
-          >
-        </div>
-
-        <div class="flex items-center gap-3 pt-4 border-t border-white/10">
-          <button 
-            type="submit" 
-            id="saveNewAdminBtn"
-            class="btn-gold flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg"
-          >
-            <i class="fa-solid fa-check"></i>
-            <span>إضافة وحفظ المسؤول</span>
-          </button>
-          <button 
-            type="button" 
-            onclick="closeAdminAddModal()" 
-            class="px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 font-bold text-sm cursor-pointer"
-          >
-            إلغاء
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Toast Notification Alert -->
+  <!-- Toast Alert -->
   <div id="toastAlert" class="fixed bottom-4 left-4 right-4 sm:right-auto sm:left-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
-    <div class="glass-card px-5 py-3.5 rounded-2xl border border-emerald-500/40 bg-slate-900/95 shadow-2xl flex items-center gap-3 text-white">
-      <div id="toastIcon" class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+    <div class="glass-card px-4 py-3 rounded-xl border border-emerald-500/30 bg-slate-900 shadow-xl flex items-center gap-3 text-white">
+      <div id="toastIcon" class="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">
         <i class="fa-solid fa-check"></i>
       </div>
       <div>
-        <p id="toastTitle" class="text-sm font-bold text-white">تم الإجراء بنجاح</p>
-        <p id="toastMessage" class="text-xs text-slate-300">تم حفظ التغييرات وتحديث السجل</p>
+        <p id="toastTitle" class="text-xs font-bold text-white">تم الإجراء بنجاح</p>
+        <p id="toastMessage" class="text-[11px] text-slate-300">تم حفظ التغييرات</p>
       </div>
     </div>
   </div>
+
+  <!-- Datalist للجامعات المصرية -->
+  <datalist id="universitiesList">
+    <!-- ديناميكياً من universities-data.js -->
+  </datalist>
 
   <!-- Scripts -->
   <script src="universities-data.js"></script>

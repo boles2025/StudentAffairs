@@ -1,304 +1,168 @@
 /**
- * تطبيق شئون طلاب الجامعات الخاصة والأهلية
- * إدارة التسجيل، البحث، تنسيق رسائل الواتساب، والترقيم التسلسلي
- * تصميم: مهندس بولس سمير - مدير شئون الطلاب جامعة اللوتس
+ * منظومة شئون طلاب الجامعات الخاصة والأهلية
+ * تطبيق التنسيق الأكاديمي وسحب ملفات الطلاب
+ * تصميم وبرمجة: مهندس بولس سمير - مدير شئون الطلاب جامعة اللوتس بالمنيا
  */
 
-// متغيرات الحالة العامة للتطبيق
+// ==========================================
+// 1. متغيرات الحالة العامة للتطبيق
+// ==========================================
+let currentUser = null;
 let allRepresentatives = [];
-let filteredRepresentatives = [];
-let currentSearchQuery = "";
-let activeView = "register"; // 'register' أو 'dashboard' أو 'admin'
+let allRequests = [];
+let allNotifications = [];
+let allUsers = [];
 
-// متغيرات لوحة تحكم الإدارة (Admin)
-let isAdminAuthenticated = false;
-let adminSearchQuery = "";
-let adminFilteredRepresentatives = [];
-const ADMIN_SECRET_PIN = "8520";
+// حالات العرض والتبويبات
+let activeMainView = "dashboard"; // 'auth' | 'dashboard'
+let activeDashTab = "incoming";    // 'incoming' | 'new_request' | 'outgoing'
+let activeAuthTab = "login";       // 'login' | 'register'
 
-// تهيئة التطبيق عند اكتمال تحميل الصفحة
+// استعلامات البحث
+let currentIncomingSearchQuery = "";
+let currentOutgoingSearchQuery = "";
+
+// الكشوف الممتدة في الوارد (تبدأ فارغة لتبدأ متقلصة مع علامة +)
+let expandedIncomingRequests = new Set();
+
+// الكشوف الممتدة في الصادرة (نفس نظام التمديد والتقلص الخاص بالواردة)
+let expandedOutgoingRequests = new Set();
+
+// مؤقتات الحفظ التلقائي
+let noteSaveDebounceTimers = {};
+
+// ==========================================
+// 2. التهيئة عند تحميل الصفحة
+// ==========================================
 document.addEventListener("DOMContentLoaded", () => {
-  // فحص الجلسة للإدارة
-  if (sessionStorage.getItem("admin_auth") === "true") {
-    isAdminAuthenticated = true;
+  setupUniversityDatalists();
+  setupPhoneInputs();
+
+  // فحص المستخدم الحالي المحفوظ بالجلسة
+  currentUser = window.firebaseService.getCurrentUser();
+
+  // تحديث واجهة الهيدر بناءً على حالة تسجيل الدخول
+  updateHeaderUserInterface();
+
+  // الاشتراك في خدمات Firebase Realtime Database
+  initFirebaseSubscriptions();
+
+  // تعيين العرض المبدئي
+  if (currentUser) {
+    switchMainView("dashboard");
+  } else {
+    switchMainView("auth");
   }
-  setupUniversityDatalist();
-  setupPhoneInputFormatting();
-  initFirebaseSubscription();
 });
 
-// ملء قائمة الجامعات في الـ Datalist للاختيار والبحث الذكي
-function setupUniversityDatalist() {
+// ملء قوائم الجامعات في الـ Datalist (تدمج القائمة الثابتة + المحفوظة محلياً)
+function setupUniversityDatalists() {
   const datalist = document.getElementById("universitiesList");
-  if (!datalist || typeof EGYPTIAN_UNIVERSITIES === "undefined") return;
+  if (!datalist) return;
+
+  // القائمة الأساسية: المحكومة من لوحة الإدارة إن وُجدت، وإلا الثابتة الافتراضية
+  const baseList = (typeof getActiveUniversities === "function")
+    ? getActiveUniversities()
+    : (typeof EGYPTIAN_UNIVERSITIES !== "undefined" ? [...EGYPTIAN_UNIVERSITIES] : []);
+  const savedExtra = JSON.parse(localStorage.getItem("extraUniversities") || "[]");
+
+  // دمج بدون تكرار
+  const merged = [...new Set([...baseList, ...savedExtra])];
 
   datalist.innerHTML = "";
-  EGYPTIAN_UNIVERSITIES.forEach((uni) => {
-    const option = document.createElement("option");
-    option.value = uni;
-    datalist.appendChild(option);
+  merged.forEach((uni) => {
+    const opt = document.createElement("option");
+    opt.value = uni;
+    datalist.appendChild(opt);
   });
 }
 
-// تحسين إدخال رقم الموبايل ومعالجة الأرقام العربية تلقائياً
-function setupPhoneInputFormatting() {
-  const phoneInput = document.getElementById("phoneInput");
-  if (!phoneInput) return;
+// إضافة جامعة جديدة للقائمة وحفظها محلياً (تحديث فوري للقوائم المنسدلة فقط)
+function addUniversityToDatalist(university) {
+  if (!university) return;
+  const saved = JSON.parse(localStorage.getItem("extraUniversities") || "[]");
+  if (!saved.includes(university)) {
+    saved.unshift(university);
+    localStorage.setItem("extraUniversities", JSON.stringify(saved));
+  }
+  if (typeof EGYPTIAN_UNIVERSITIES !== "undefined" && !EGYPTIAN_UNIVERSITIES.includes(university)) {
+    EGYPTIAN_UNIVERSITIES.unshift(university);
+  }
+  setupUniversityDatalists();
+}
 
-  phoneInput.addEventListener("input", (e) => {
-    // تحويل الأرقام المكتوبة بالهندية/العربية (٠-٩) إلى أرقام إنجليزية (0-9)
-    let val = convertArabicNumeralsToEnglish(e.target.value);
-    // السماح فقط بالأرقام وعلامة الزائد
-    val = val.replace(/[^\d+]/g, "");
-    e.target.value = val;
+// تسجيل جامعة جديدة في القائمة المركزية بالسحابة (قائمة الجامعات المحكومة من لوحة الإدارة)
+// تُستدعى بعد نجاح تسجيل موظف بجامعة غير موجودة في القائمة، ليتحكم بها الأدمن (تعديل/حذف)
+function syncUniversityToCentralList(university) {
+  const clean = (university || "").trim();
+  if (!clean) return;
 
-    validatePhoneField(val);
+  if (window.firebaseService && typeof window.firebaseService.addUniversityIfMissing === "function") {
+    window.firebaseService.addUniversityIfMissing(clean)
+      .then((added) => {
+        if (added) {
+          if (typeof showToast === "function") {
+            showToast("جامعة جديدة 🏛️", `تمت إضافة جامعة "${clean}" إلى القائمة المركزية ويُمكن للإدارة التحكم فيها`, "success");
+          }
+          setupUniversityDatalists();
+        }
+      })
+      .catch((err) => console.warn("Failed to sync new university to central list:", err));
+  }
+}
+
+
+// تحسين إدخال أرقام الموبايل المصرية (حقل التسجيل فقط - حقل الدخول يقبل اسم جامعة أيضاً)
+function setupPhoneInputs() {
+  const phoneIds = ["registerPhoneInput"]; // loginPhoneInput مُستثنى لأنه يقبل اسم جامعة
+  phoneIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("input", (e) => {
+        let val = convertArabicNumeralsToEnglish(e.target.value);
+        val = val.replace(/[^\d+]/g, "");
+        e.target.value = val;
+      });
+    }
   });
 }
 
-// دالة تحويل الأرقام العربية/الهندية إلى أرقام لاتينية
+// تحويل الأرقام العربية/الهندية (٠-٩) إلى أرقام لاتينية (0-9)
 function convertArabicNumeralsToEnglish(str) {
   if (!str) return "";
   const arabicNumerals = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
-  return str.replace(/[٠-٩]/g, (w) => arabicNumerals.indexOf(w));
+  return str.toString().replace(/[٠-٩]/g, (w) => arabicNumerals.indexOf(w));
 }
 
-// التحقق من صحة رقم الموبايل المصري
-function validatePhoneField(phone) {
-  const phoneError = document.getElementById("phoneError");
-  const cleaned = cleanPhoneNumber(phone);
-  
-  // يجب أن يبدأ بـ 010 أو 011 أو 012 أو 015 ومكون من 11 رقم
-  const isValid = /^01[0125][0-9]{8}$/.test(cleaned);
-  
-  if (phone.length > 0 && !isValid && phone.length >= 11) {
-    phoneError.classList.remove("hidden");
-    return false;
-  } else {
-    phoneError.classList.add("hidden");
-    return isValid;
-  }
-}
-
-// تنظيف وتوحيد صيغة رقم الموبايل
+// تنظيف وتوحيد رقم الموبايل المصري
 function cleanPhoneNumber(phone) {
   if (!phone) return "";
   let p = convertArabicNumeralsToEnglish(phone).replace(/\D/g, "");
-  // إذا كان يبدأ بكود مصر 2001 -> 01
   if (p.startsWith("20") && p.length === 12) {
     p = p.substring(2);
   }
   return p;
 }
 
-// تحويل رقم الموبايل إلى صيغة دولية للواتساب (+2010XXXXXXXX)
+// تجهيز رقم الموبايل للواتساب الدولي (+2010XXXXXXXX)
 function getWhatsAppPhoneNumber(phone) {
   let cleaned = cleanPhoneNumber(phone);
   if (cleaned.startsWith("0")) {
-    cleaned = "2" + cleaned; // إضافة 2 لمصر (201XXXXXXXXX)
+    cleaned = "2" + cleaned;
   } else if (!cleaned.startsWith("20")) {
     cleaned = "20" + cleaned;
   }
   return cleaned;
 }
 
-// التحقق من الاسم الثلاثي (3 مقاطع على الأقل)
+// التحقق من الاسم ثلاثي
 function validateFullName(name) {
-  const trimmed = name.trim();
+  const trimmed = (name || "").trim();
   const parts = trimmed.split(/\s+/).filter((part) => part.length > 1);
   return parts.length >= 3;
 }
 
-// التبديل بين شاشة التسجيل وشاشة السجل وشاشة الإدارة
-function switchView(view) {
-  activeView = view;
-  const registerView = document.getElementById("registerView");
-  const dashboardView = document.getElementById("dashboardView");
-  const adminView = document.getElementById("adminView");
-  const navRegisterBtn = document.getElementById("navRegisterBtn");
-  const navDashboardBtn = document.getElementById("navDashboardBtn");
-
-  // إذا كان المطلوب الانتقال للوحة الإدارة
-  if (view === "admin") {
-    if (!isAdminAuthenticated && sessionStorage.getItem("admin_auth") !== "true") {
-      openAdminAuthModal();
-      return;
-    }
-    isAdminAuthenticated = true;
-    if (registerView) registerView.classList.add("hidden");
-    if (dashboardView) dashboardView.classList.add("hidden");
-    if (adminView) adminView.classList.remove("hidden");
-
-    if (navRegisterBtn) navRegisterBtn.className = "px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 text-slate-300 hover:text-white";
-    if (navDashboardBtn) navDashboardBtn.className = "px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 text-slate-300 hover:text-white";
-
-    // تحديث إحصائيات الإدارة والجدول فوراً
-    updateAdminStats();
-    renderAdminTable();
-    return;
-  }
-
-  // إخفاء لوحة الإدارة عند التبديل للشاشات العادية
-  if (adminView) adminView.classList.add("hidden");
-
-  if (view === "register") {
-    if (registerView) registerView.classList.remove("hidden");
-    if (dashboardView) dashboardView.classList.add("hidden");
-
-    // تحديث أزرار التنقل
-    if (navRegisterBtn) navRegisterBtn.className = "px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 bg-amber-500 text-slate-950 shadow-md";
-    if (navDashboardBtn) navDashboardBtn.className = "px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 text-slate-300 hover:text-white";
-  } else {
-    if (registerView) registerView.classList.add("hidden");
-    if (dashboardView) dashboardView.classList.remove("hidden");
-
-    if (navDashboardBtn) navDashboardBtn.className = "px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 bg-amber-500 text-slate-950 shadow-md";
-    if (navRegisterBtn) navRegisterBtn.className = "px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 text-slate-300 hover:text-white";
-
-    // إعادة تطبيق الفلترة والتحديث
-    renderRecords();
-  }
-}
-
-// معالجة إرسال نموذج التسجيل الجديد
-async function handleFormSubmit(e) {
-  e.preventDefault();
-
-  const fullNameInput = document.getElementById("fullNameInput");
-  const phoneInput = document.getElementById("phoneInput");
-  const universityInput = document.getElementById("universityInput");
-  const fullNameError = document.getElementById("fullNameError");
-  const phoneError = document.getElementById("phoneError");
-  const submitBtn = document.getElementById("submitBtn");
-
-  const fullName = fullNameInput.value.trim();
-  const rawPhone = phoneInput.value.trim();
-  const university = universityInput.value.trim();
-
-  // التحقق من الاسم ثلاثي
-  if (!validateFullName(fullName)) {
-    fullNameError.classList.remove("hidden");
-    fullNameInput.focus();
-    return;
-  }
-  fullNameError.classList.add("hidden");
-
-  // التحقق من رقم الموبايل
-  const cleanedPhone = cleanPhoneNumber(rawPhone);
-  if (!/^01[0125][0-9]{8}$/.test(cleanedPhone)) {
-    phoneError.classList.remove("hidden");
-    phoneInput.focus();
-    return;
-  }
-  phoneError.classList.add("hidden");
-
-  // التحقق من اسم الجامعة
-  if (!university) {
-    showToast("تنبيه", "يرجى كتابة أو تحديد اسم الجامعة", "error");
-    universityInput.focus();
-    return;
-  }
-
-  // إذا كان اسم الجامعة مدخلاً يدوياً وغير موجود في القائمة، يتم قبوله وإضافته فوراً
-  if (typeof EGYPTIAN_UNIVERSITIES !== "undefined" && !EGYPTIAN_UNIVERSITIES.includes(university)) {
-    EGYPTIAN_UNIVERSITIES.unshift(university);
-    setupUniversityDatalist();
-  }
-
-  // تعطيل الزر أثناء الحفظ
-  const originalBtnText = submitBtn.innerHTML;
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xl"></i><span>جاري الحفظ في السحابة...</span>`;
-
-  try {
-    const representativeData = {
-      fullName: fullName,
-      phone: cleanedPhone,
-      whatsappPhone: getWhatsAppPhoneNumber(cleanedPhone),
-      university: university,
-      studentsList: ""
-    };
-
-    await window.firebaseService.add(representativeData);
-
-    // إعادة تهيئة النموذج
-    e.target.reset();
-
-    showToast("تم التسجيل بنجاح! 🎉", `تم تسجيل ${fullName} كمسؤول لشئون طلاب ${university}`, "success");
-
-    // الانتقال التلقائي المباشر لشاشة السجل كما طلب المستخدم
-    setTimeout(() => {
-      switchView("dashboard");
-    }, 400);
-
-  } catch (error) {
-    console.error("Registration error:", error);
-    showToast("خطأ", "حدث خطأ أثناء حفظ البيانات، يرجى المحاولة ثانية", "error");
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = originalBtnText;
-  }
-}
-
-// الاشتراك في تحديثات Firebase الفورية
-function initFirebaseSubscription() {
-  const connectionBadge = document.getElementById("connectionBadge");
-  const connectionText = document.getElementById("connectionText");
-
-  window.firebaseService.subscribe((data, isCloud) => {
-    allRepresentatives = data || [];
-    
-    // تحديث الشارة إن وجدت
-    if (connectionBadge && connectionText) {
-      if (isCloud) {
-        connectionBadge.className = "hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold";
-        connectionText.innerText = "قاعدة البيانات متصلة ومحدثة 🟢";
-      } else {
-        connectionBadge.className = "hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold";
-        connectionText.innerText = "يعمل بالذاكرة المحلية 🟡";
-      }
-    }
-
-    // تحديث العداد
-    const counterBadge = document.getElementById("recordsCounterBadge");
-    if (counterBadge) counterBadge.innerText = allRepresentatives.length;
-
-    // تطبيق البحث الحالي والرندر
-    applyFilter();
-
-    // تحديث شاشة الإدارة إذا كانت مفتوحة
-    if (activeView === "admin") {
-      updateAdminStats();
-      renderAdminTable();
-    }
-  });
-}
-
-// معالجة البحث الفوري
-function handleSearch(query) {
-  currentSearchQuery = query;
-  const clearBtn = document.getElementById("clearSearchBtn");
-  if (clearBtn) {
-    if (query.trim().length > 0) {
-      clearBtn.classList.remove("hidden");
-    } else {
-      clearBtn.classList.add("hidden");
-    }
-  }
-  applyFilter();
-}
-
-// مسح البحث
-function clearSearch() {
-  const searchInput = document.getElementById("searchInput");
-  if (searchInput) searchInput.value = "";
-  currentSearchQuery = "";
-  const clearBtn = document.getElementById("clearSearchBtn");
-  if (clearBtn) clearBtn.classList.add("hidden");
-  applyFilter();
-}
-
-// تطبيع النصوص العربية والأرقام لتسهيل البحث الذكي الشامل
+// تطبيع النصوص العربية لتسهيل البحث الذكي الشامل
 function normalizeArabic(text) {
   if (!text) return "";
   let str = convertArabicNumeralsToEnglish(text.toString()).toLowerCase();
@@ -306,42 +170,1369 @@ function normalizeArabic(text) {
     .replace(/[أإآ]/g, "ا")
     .replace(/ة/g, "ه")
     .replace(/ى/g, "ي")
-    .replace(/[\u064B-\u065F]/g, "") // إزالة التشكيل
+    .replace(/[\u064B-\u065F]/g, "")
     .replace(/[^\w\s\u0600-\u06FF]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// تطبيق الفلتر على السجلات بذكاء فوري وشامل بأي جزء من الكلمة
-function applyFilter() {
-  if (!currentSearchQuery || currentSearchQuery.trim() === "") {
-    filteredRepresentatives = [...allRepresentatives];
-  } else {
-    // تجزئة الكلمات المكتوبة في البحث
-    const qNormalized = normalizeArabic(currentSearchQuery);
-    const searchTerms = qNormalized.split(/\s+/).filter((w) => w.length > 0);
+// حماية النصوص من الـ XSS
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-    filteredRepresentatives = allRepresentatives.filter((item) => {
-      // جمع كل تفاصيل السجل في نص شامل واحد للمطابقة الفورية
-      const fullRecordText = normalizeArabic(
-        `${item.fullName || ""} ${item.phone || ""} ${item.university || ""} ${item.studentsList || ""}`
-      );
-      // التأكد من أن كل جزء أو كلمة في البحث موجودة داخل بيانات السجل
-      return searchTerms.every((term) => fullRecordText.includes(term));
+// ==========================================
+// 3. الاشتراكات اللحظية في Firebase
+// ==========================================
+function initFirebaseSubscriptions() {
+  // 1. اشتراك كشوف طلبات سحب الطلاب (Requests)
+  window.firebaseService.subscribeRequests((data) => {
+    allRequests = data || [];
+    if (currentUser) {
+      updateDashboardData();
+    }
+  });
+
+  // 2. اشتراك الإشعارات اللحظية (Notifications)
+  window.firebaseService.subscribeNotifications((data) => {
+    const prevNotifCount = (allNotifications || []).filter((n) => isNotificationForCurrentUser(n) && !n.isRead).length;
+    allNotifications = data || [];
+    
+    if (currentUser) {
+      renderNotifications();
+      const newUnreadCount = allNotifications.filter((n) => isNotificationForCurrentUser(n) && !n.isRead).length;
+      if (newUnreadCount > prevNotifCount) {
+        playNotificationChime();
+        const latestNotif = allNotifications.find((n) => isNotificationForCurrentUser(n) && !n.isRead);
+        if (latestNotif) {
+          showToast("إشعار جديد 🔔", latestNotif.message, "info");
+        }
+      }
+    }
+  });
+
+  // 3. اشتراك ممثلي الجامعات وقائمة المستخدمين
+  window.firebaseService.subscribeRepresentatives((data) => {
+    allRepresentatives = data || [];
+  });
+
+  // 4. اشتراك قائمة الجامعات المركزية (ينعكس تعديل الإدارة فوراً على قوائم الاختيار)
+  if (typeof window.firebaseService.subscribeUniversities === 'function') {
+    window.firebaseService.subscribeUniversities((uniList, hasData) => {
+      if (hasData && Array.isArray(uniList)) {
+        // إعادة بناء قوائم اختيار الجامعات بعد أي تعديل من لوحة الإدارة
+        setupUniversityDatalists();
+      }
     });
   }
 
-  const countBadge = document.getElementById("filteredCount");
-  if (countBadge) countBadge.innerText = filteredRepresentatives.length;
-
-  renderRecords();
+  window.firebaseService.subscribeUsers((data) => {
+    allUsers = data || [];
+    // إضافة جامعات المستخدمين المسجّلين للقوائم المحلية فقط
+    // (المزامنة مع القائمة المركزية تحدث حصراً عند التسجيل الجديد حتى لا تُلغي حذف الإدارة)
+    allUsers.forEach(u => {
+      if (u.university) addUniversityToDatalist(u.university);
+    });
+  });
 }
 
-// تحويل أي نص (منسوخ أو مكتوب) إلى نقاط تسلسلية مرقمة 1. 2. 3.
+// ==========================================
+// 4. التحكم في الشاشات والتنقل الرئيسي
+// ==========================================
+function switchMainView(view) {
+  activeMainView = view;
+  const authView = document.getElementById("authView");
+  const dashboardView = document.getElementById("employeeDashboardView");
+
+  if (authView) authView.classList.add("hidden");
+  if (dashboardView) dashboardView.classList.add("hidden");
+
+  if (view === "auth") {
+    if (authView) authView.classList.remove("hidden");
+  } else if (view === "dashboard") {
+    if (!currentUser) {
+      switchMainView("auth");
+      return;
+    }
+    if (dashboardView) dashboardView.classList.remove("hidden");
+    updateDashboardData();
+  }
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// التبديل بين تبويبات لوحة تحكم الموظف (3 تبويبات واضحة فقط)
+function switchDashTab(tab) {
+  activeDashTab = tab;
+
+  const tabs = [
+    { id: "incoming", btn: "tabBtnIncoming", view: "subViewIncoming" },
+    { id: "new_request", btn: "tabBtnNewRequest", view: "subViewNewRequest" },
+    { id: "outgoing", btn: "tabBtnOutgoing", view: "subViewOutgoing" }
+  ];
+
+  tabs.forEach((t) => {
+    const btn = document.getElementById(t.btn);
+    const view = document.getElementById(t.view);
+
+    if (t.id === tab) {
+      if (btn) btn.className = "dash-tab-btn active flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer";
+      if (view) view.classList.remove("hidden");
+    } else {
+      if (btn) btn.className = "dash-tab-btn flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer";
+      if (view) view.classList.add("hidden");
+    }
+  });
+
+  if (tab === "incoming") {
+    renderIncomingRequests();
+  } else if (tab === "outgoing") {
+    renderOutgoingRequests();
+  }
+}
+
+// التبديل بين تبويبات تسجيل الدخول والتسجيل الجديد
+function switchAuthTab(tab) {
+  activeAuthTab = tab;
+  const loginForm = document.getElementById("loginForm");
+  const registerForm = document.getElementById("registerForm");
+  const tabLoginBtn = document.getElementById("tabLoginBtn");
+  const tabRegisterBtn = document.getElementById("tabRegisterBtn");
+
+  if (tab === "login") {
+    if (loginForm) loginForm.classList.remove("hidden");
+    if (registerForm) registerForm.classList.add("hidden");
+    if (tabLoginBtn) tabLoginBtn.className = "py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 cursor-pointer";
+    if (tabRegisterBtn) tabRegisterBtn.className = "py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+  } else {
+    if (loginForm) loginForm.classList.add("hidden");
+    if (registerForm) registerForm.classList.remove("hidden");
+    if (tabRegisterBtn) tabRegisterBtn.className = "py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-amber-500 text-slate-950 cursor-pointer";
+    if (tabLoginBtn) tabLoginBtn.className = "py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+  }
+}
+
+// تحديث واجهة الهيدر بناءً على حالة تسجيل الدخول
+function updateHeaderUserInterface() {
+  const headerUser = document.getElementById("headerUserSection");
+  const headerGuest = document.getElementById("headerGuestSection");
+  const userNameDisplay = document.getElementById("userNameDisplay");
+  const userUniversityDisplay = document.getElementById("userUniversityDisplay");
+  const userAvatarText = document.getElementById("userAvatarText");
+
+  if (currentUser) {
+    if (headerUser) headerUser.classList.remove("hidden");
+    if (headerGuest) headerGuest.classList.add("hidden");
+
+    if (userNameDisplay) userNameDisplay.innerText = currentUser.fullName || "مسؤول شئون الطلاب";
+    if (userUniversityDisplay) userUniversityDisplay.innerText = currentUser.university || "";
+    if (userAvatarText) {
+      const firstChar = (currentUser.fullName || "م").trim().charAt(0);
+      userAvatarText.innerText = firstChar;
+    }
+  } else {
+    if (headerUser) headerUser.classList.add("hidden");
+    if (headerGuest) headerGuest.classList.remove("hidden");
+  }
+}
+
+// ==========================================
+// 5. إدارة الحسابات (دخول، تسجيل، خروج)
+// ==========================================
+
+async function handleLoginSubmit(e) {
+  e.preventDefault();
+  const phoneInput = document.getElementById("loginPhoneInput");
+  const passwordInput = document.getElementById("loginPasswordInput");
+  const phoneError = document.getElementById("loginPhoneError");
+  const submitBtn = document.getElementById("loginSubmitBtn");
+
+  const rawInput = phoneInput.value.trim();
+  const password = passwordInput.value;
+
+  // تحديد نوع الإدخال: رقم موبايل أم اسم جامعة
+  const digitsOnly = rawInput.replace(/\D/g, "");
+  const isPhone = digitsOnly.length > 0 && /^\d+$/.test(rawInput.replace(/[\s\-\+]/g, ""));
+  const identifier = isPhone ? cleanPhoneNumber(rawInput) : rawInput;
+
+  if (isPhone) {
+    if (!/^01[0125][0-9]{8}$/.test(identifier)) {
+      if (phoneError) phoneError.classList.remove("hidden");
+      phoneInput.focus();
+      return;
+    }
+    if (phoneError) phoneError.classList.add("hidden");
+  } else {
+    // اسم جامعة — لا يحتاج تحقق من صيغة رقم
+    if (phoneError) phoneError.classList.add("hidden");
+  }
+
+
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-sm"></i> <span>جاري التحقق...</span>`;
+
+  try {
+    const res = await window.firebaseService.loginUser(identifier, password);
+    if (res.success) {
+      currentUser = res.user;
+      updateHeaderUserInterface();
+      showToast("مرحباً بك 👋", `تم تسجيل الدخول كمسؤول شئون طلاب ${currentUser.university}`, "success");
+      switchMainView("dashboard");
+    } else {
+      showToast("تعذر تسجيل الدخول", res.error || "تأكد من اسم الجامعة أو رقم الموبايل أو كلمة المرور", "error");
+    }
+  } catch (err) {
+    console.error("Login error:", err);
+    showToast("خطأ", "حدث خطأ أثناء الدخول", "error");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+}
+
+
+async function handleRegisterSubmit(e) {
+  e.preventDefault();
+  const phoneInput    = document.getElementById("registerPhoneInput");
+  const uniInput      = document.getElementById("registerUniversityInput");
+  const contactInput  = document.getElementById("registerContactPersonInput");
+  const passwordInput = document.getElementById("registerPasswordInput");
+  const phoneError    = document.getElementById("registerPhoneError");
+  const submitBtn     = document.getElementById("registerSubmitBtn");
+
+  const rawPhone    = phoneInput ? phoneInput.value.trim() : "";
+  const university  = uniInput  ? uniInput.value.trim()   : "";
+  const contactPerson = contactInput ? contactInput.value.trim() : "";
+  const password    = passwordInput ? passwordInput.value : "";
+
+  // التحقق من اسم الجامعة
+  if (!university) {
+    showToast("تنبيه", "يرجى تحديد أو كتابة اسم الجامعة", "error");
+    if (uniInput) uniInput.focus();
+    return;
+  }
+
+  // التحقق من رقم الموبايل
+  const cleanedPhone = cleanPhoneNumber(rawPhone);
+  if (!/^01[0125][0-9]{8}$/.test(cleanedPhone)) {
+    if (phoneError) phoneError.classList.remove("hidden");
+    if (phoneInput) phoneInput.focus();
+    return;
+  }
+  if (phoneError) phoneError.classList.add("hidden");
+
+  // التحقق من كلمة المرور
+  if (!password || password.length < 4) {
+    showToast("تنبيه", "يرجى إدخال كلمة مرور (4 أحرف على الأقل)", "error");
+    if (passwordInput) passwordInput.focus();
+    return;
+  }
+
+  // إضافة الجامعة للقائمة المنسدلة تلقائياً
+  addUniversityToDatalist(university);
+
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-sm"></i> <span>جاري إنشاء الحساب...</span>`;
+
+  try {
+    const userData = {
+      fullName: university,
+      phone: cleanedPhone,
+      university,
+      contactPerson,
+      jobTitle: "مسؤول شئون الطلاب",
+      password
+    };
+
+    const res = await window.firebaseService.registerUser(userData);
+    if (res.success) {
+      currentUser = res.user;
+      window.firebaseService.setCurrentUser(currentUser);
+      updateHeaderUserInterface();
+      // تسجيل الجامعة في القائمة المركزية بالسحابة إذا كانت جديدة
+      // كي تظهر فعلياً بشاشة الإدارة ويبقى الإدمن متحكماً فيها (تعديل/حذف)
+      syncUniversityToCentralList(university);
+      showToast("أهلاً بك 🎉", `تم إنشاء حساب جامعة ${university} بنجاح`, "success");
+      switchMainView("dashboard");
+    } else {
+      showToast("خطأ", res.error || "تعذر إنشاء الحساب", "error");
+    }
+  } catch (err) {
+    console.error("Register error:", err);
+    showToast("خطأ", "حدث خطأ أثناء حفظ الحساب، تحقق من الاتصال", "error");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+}
+
+
+function handleUserLogout() {
+  if (confirm("هل تريد تسجيل الخروج من حسابك؟")) {
+    window.firebaseService.clearCurrentUser();
+    currentUser = null;
+    updateHeaderUserInterface();
+    switchMainView("auth");
+    showToast("تم تسجيل الخروج", "تمت العودة لبوابة تسجيل الدخول", "info");
+  }
+}
+
+// ==========================================
+// 6. لوحة تحكم الموظف الشخصية (Dashboard)
+// ==========================================
+
+function updateDashboardData() {
+  if (!currentUser) return;
+
+  const welcomeName = document.getElementById("dashWelcomeName");
+  const welcomeUni = document.getElementById("dashWelcomeUni");
+  const welcomeJob = document.getElementById("dashWelcomeJob");
+
+  if (welcomeName) welcomeName.innerText = currentUser.fullName || "";
+  if (welcomeUni) welcomeUni.innerText = currentUser.university || "";
+  if (welcomeJob) welcomeJob.innerText = currentUser.jobTitle || "مسؤول شئون الطلاب";
+
+  const userUniNorm = normalizeArabic(currentUser.university || "");
+  const incomingReqs = allRequests.filter((r) => {
+    return normalizeArabic(r.targetUniversity || "") === userUniNorm;
+  });
+
+  const userPhoneClean = cleanPhoneNumber(currentUser.phone);
+  const outgoingReqs = allRequests.filter((r) => {
+    return r.senderId === currentUser.id || cleanPhoneNumber(r.senderPhone) === userPhoneClean;
+  });
+
+  let totalIncomingStudents = 0;
+  let completedStudentsCount = 0;
+
+  incomingReqs.forEach((req) => {
+    if (req.students && Array.isArray(req.students)) {
+      totalIncomingStudents += req.students.length;
+      completedStudentsCount += req.students.filter((s) => s.isCompleted).length;
+    }
+  });
+
+  const completionPercent = totalIncomingStudents > 0 
+    ? Math.round((completedStudentsCount / totalIncomingStudents) * 100) 
+    : 0;
+
+  const statIncReq = document.getElementById("statIncomingRequests");
+  const statIncStud = document.getElementById("statIncomingStudents");
+  const statCompPercent = document.getElementById("statCompletedPercent");
+  const statOutReq = document.getElementById("statOutgoingRequests");
+
+  const incomingBadgeCounter = document.getElementById("incomingBadgeCounter");
+  const outgoingBadgeCounter = document.getElementById("outgoingBadgeCounter");
+
+  if (statIncReq) statIncReq.innerText = incomingReqs.length;
+  if (statIncStud) statIncStud.innerText = totalIncomingStudents;
+  if (statCompPercent) statCompPercent.innerText = `${completionPercent}% تم سحبهم (${completedStudentsCount}/${totalIncomingStudents})`;
+  if (statOutReq) statOutReq.innerText = outgoingReqs.length;
+
+  if (incomingBadgeCounter) incomingBadgeCounter.innerText = incomingReqs.length;
+  if (outgoingBadgeCounter) outgoingBadgeCounter.innerText = outgoingReqs.length;
+
+  if (activeDashTab === "incoming") {
+    renderIncomingRequests();
+  } else if (activeDashTab === "outgoing") {
+    renderOutgoingRequests();
+  }
+}
+
+// ==========================================
+// 7. الكشوف الواردة لجامعتي (متقلصة مع علامة + وإمكانية الحذف)
+// ==========================================
+
+function toggleIncomingRequestExpand(requestId, event) {
+  if (event) event.stopPropagation();
+  const bodyEl = document.getElementById(`request-body-${requestId}`);
+  const iconEl = document.getElementById(`expand-icon-${requestId}`);
+  const labelEl = document.getElementById(`expand-label-${requestId}`);
+  
+  if (expandedIncomingRequests.has(requestId)) {
+    expandedIncomingRequests.delete(requestId);
+    if (bodyEl) bodyEl.classList.add("hidden");
+    if (iconEl) iconEl.className = "fa-solid fa-plus";
+    if (labelEl) labelEl.innerText = "انقر للتمديد وعرض أسماء الطلاب 🔽";
+  } else {
+    expandedIncomingRequests.add(requestId);
+    if (bodyEl) bodyEl.classList.remove("hidden");
+    if (iconEl) iconEl.className = "fa-solid fa-minus";
+    if (labelEl) labelEl.innerText = "انقر لطي الكشف 🔼";
+  }
+}
+
+function expandAllIncomingRequests() {
+  const userUniNorm = normalizeArabic(currentUser ? currentUser.university || "" : "");
+  allRequests
+    .filter((r) => normalizeArabic(r.targetUniversity || "") === userUniNorm)
+    .forEach((r) => expandedIncomingRequests.add(r.id));
+  renderIncomingRequests();
+}
+
+function collapseAllIncomingRequests() {
+  expandedIncomingRequests.clear();
+  renderIncomingRequests();
+}
+
+function handleIncomingSearch(val) {
+  currentIncomingSearchQuery = val || "";
+  renderIncomingRequests();
+}
+
+function renderIncomingRequests() {
+  const container = document.getElementById("incomingRequestsContainer");
+  const emptyState = document.getElementById("incomingEmptyState");
+  const countDisplay = document.getElementById("incomingCountDisplay");
+  if (!container || !currentUser) return;
+
+  const userUniNorm = normalizeArabic(currentUser.university || "");
+  let requests = allRequests.filter((r) => {
+    return normalizeArabic(r.targetUniversity || "") === userUniNorm;
+  });
+
+  if (currentIncomingSearchQuery && currentIncomingSearchQuery.trim() !== "") {
+    const qTerms = normalizeArabic(currentIncomingSearchQuery).split(/\s+/).filter(Boolean);
+    requests = requests.filter((req) => {
+      const fullText = normalizeArabic(
+        `${req.senderUniversity || ""} ${req.senderName || ""} ${(req.students || []).map((s) => `${s.name} ${s.nationalId || ""}`).join(" ")}`
+      );
+      return qTerms.every((term) => fullText.includes(term));
+    });
+  }
+
+  if (countDisplay) countDisplay.innerText = requests.length;
+
+  if (requests.length === 0) {
+    container.innerHTML = "";
+    if (emptyState) emptyState.classList.remove("hidden");
+    return;
+  }
+
+  if (emptyState) emptyState.classList.add("hidden");
+
+  container.innerHTML = requests.map((req) => {
+    const students = req.students || [];
+    const totalCount = students.length;
+    const completedCount = students.filter((s) => s.isCompleted).length;
+    const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+    const formattedDate = new Date(req.createdAt || Date.now()).toLocaleDateString("ar-EG", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+    const isExpanded = expandedIncomingRequests.has(req.id);
+
+    return `
+      <div class="glass-card p-4 sm:p-5 border border-white/10 shadow transition-all" id="request-card-${req.id}">
+        
+        <!-- رأس الكشف المتقلص -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${isExpanded ? 'border-b border-white/10 pb-3.5' : ''}">
+          
+          <div class="flex items-start gap-3 flex-1 cursor-pointer select-none" onclick="toggleIncomingRequestExpand('${req.id}', event)">
+            <!-- زر + أو - للتمديد والطي -->
+            <button 
+              type="button"
+              onclick="toggleIncomingRequestExpand('${req.id}', event)"
+              class="w-9 h-9 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 flex items-center justify-center text-sm font-bold transition-all cursor-pointer shadow flex-shrink-0 mt-0.5"
+              title="${isExpanded ? 'طي الكشف' : 'تمديد وعرض أسماء الطلاب'}"
+            >
+              <i id="expand-icon-${req.id}" class="fa-solid ${isExpanded ? 'fa-minus' : 'fa-plus'}"></i>
+            </button>
+
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h4 class="text-sm sm:text-base font-bold text-white leading-tight">
+                  كشف وارد من: <span class="text-amber-300 font-extrabold">${escapeHtml(req.senderUniversity)}</span>
+                </h4>
+                <span class="px-2 py-0.5 rounded-full text-xs font-bold font-mono ${
+                  completedCount === totalCount && totalCount > 0
+                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                    : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
+                }">
+                  ${completedCount} / ${totalCount} تم سحبهم (${progressPercent}%)
+                </span>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-slate-300 mt-1 flex-wrap">
+                <span>المرسل: <strong>${escapeHtml(req.senderName)}</strong></span>
+                <span class="text-slate-500">•</span>
+                <span class="font-mono text-slate-400">${formattedDate}</span>
+                <span class="text-slate-500">•</span>
+                <a href="tel:${req.senderPhone}" onclick="event.stopPropagation()" class="text-emerald-400 font-mono font-bold hover:underline" dir="ltr">
+                  ${escapeHtml(req.senderPhone)}
+                </a>
+              </div>
+              <p id="expand-label-${req.id}" class="text-[11px] text-amber-300/80 font-medium mt-1">
+                ${isExpanded ? 'انقر لطي الكشف 🔼' : `انقر للتمديد وعرض أسماء الطلاب (${totalCount} طالب) 🔽`}
+              </p>
+            </div>
+          </div>
+
+          <!-- أزرار الإجراءات للكشف: تقرير واتساب + طباعة + حذف الكشف -->
+          <div class="flex items-center gap-2 w-full sm:w-auto justify-end pt-1 sm:pt-0" onclick="event.stopPropagation()">
+            <button 
+              onclick="sendIncomingStatusReportToWhatsApp('${req.id}')"
+              class="btn-whatsapp px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow"
+              title="إرسال تقرير حالة للواتساب للمسؤول المرسل"
+            >
+              <i class="fa-brands fa-whatsapp"></i>
+              <span>واتساب</span>
+            </button>
+
+            <button 
+              onclick="openPrintReportModal('${req.id}')"
+              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              title="معاينة وطباعة الكشف الرسمي"
+            >
+              <i class="fa-solid fa-print"></i>
+              <span>طباعة</span>
+            </button>
+
+            <!-- زر حذف الكشف الوارد -->
+            <button 
+              onclick="handleDeleteIncomingRequest('${req.id}', event)"
+              class="btn-danger px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+              title="حذف هذا الكشف الوارد نهائياً"
+            >
+              <i class="fa-regular fa-trash-can"></i>
+              <span>حذف</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- جسم الكشف القابل للتمديد والطي (افتراضياً متقلص) -->
+        <div id="request-body-${req.id}" class="${isExpanded ? '' : 'hidden'} space-y-3.5 pt-3.5 transition-all">
+          
+          <!-- شريط التقدم -->
+          <div class="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 progress-fill rounded-full" style="width: ${progressPercent}%"></div>
+          </div>
+
+          <!-- جدول أسماء الطلاب والتحكم (Check + Notes) -->
+          <div class="overflow-x-auto rounded-xl border border-white/10 bg-slate-900/60">
+            <table class="w-full text-right border-collapse text-xs sm:text-sm">
+              <thead>
+                <tr class="bg-slate-800/80 text-amber-300 border-b border-white/10 text-xs font-bold">
+                  <th class="py-2.5 px-3 w-10 text-center">#</th>
+                  <th class="py-2.5 px-3 min-w-[190px]">اسم الطالب</th>
+                  <th class="py-2.5 px-3 min-w-[150px] text-center">الرقم القومي</th>
+                  <th class="py-2.5 px-3 min-w-[140px] text-center">حالة السحب</th>
+                  <th class="py-2.5 px-3 min-w-[240px]">خانة الملاحظات</th>
+                  <th class="py-2.5 px-3 min-w-[110px] text-center">التاريخ</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/5">
+                ${students.map((st, idx) => {
+                  const isDone = !!st.isCompleted;
+                  const formattedTime = st.completedAt 
+                    ? new Date(st.completedAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })
+                    : "";
+
+                  return `
+                    <tr class="hover:bg-slate-800/30 transition-colors ${isDone ? 'bg-emerald-500/5' : ''}">
+                      <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-400">${idx + 1}</td>
+
+                      <td class="py-2.5 px-3 font-bold text-white">
+                        <span class="${isDone ? 'text-emerald-300' : 'text-slate-100'}">${escapeHtml(st.name)}</span>
+                      </td>
+
+                      <!-- الرقم القومي -->
+                      <td class="py-2.5 px-3 text-center">
+                        ${
+                          st.nationalId && String(st.nationalId).trim()
+                            ? `<span class="font-mono text-slate-200 font-bold text-xs" dir="ltr">${escapeHtml(st.nationalId)}</span>`
+                            : `<span class="text-slate-500 text-xs italic">غير مسجل</span>`
+                        }
+                      </td>
+
+                      <!-- زر الاتشيك -->
+                      <td class="py-2.5 px-3 text-center">
+                        <button 
+                          type="button"
+                          onclick="handleToggleStudentStatus('${req.id}', '${st.id}', ${!isDone})"
+                          class="withdrawal-check-btn px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer border flex items-center justify-center gap-1.5 mx-auto ${
+                            isDone 
+                              ? 'checked bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
+                              : 'bg-slate-800 text-slate-300 border-white/10 hover:border-amber-400'
+                          }"
+                        >
+                          <i class="fa-solid ${isDone ? 'fa-circle-check text-emerald-400' : 'fa-circle text-slate-500'}"></i>
+                          <span>${isDone ? 'تم السحب ✅' : 'وضع علامة تم السحب'}</span>
+                        </button>
+                      </td>
+
+                      <!-- خانة الملاحظات -->
+                      <td class="py-2.5 px-3">
+                        <input 
+                          type="text" 
+                          id="note-input-${st.id}"
+                          value="${escapeHtml(st.notes || '')}"
+                          oninput="handleStudentNoteInputChanged('${req.id}', '${st.id}', this.value)"
+                          onblur="handleStudentNoteBlur('${req.id}', '${st.id}', this.value)"
+                          placeholder="اكتب ملاحظة (مثل: تم تسليم الملف لولي الأمر)..." 
+                          class="student-note-input w-full px-2.5 py-1.5 rounded-lg text-xs text-white placeholder-slate-500"
+                        >
+                      </td>
+
+                      <td class="py-2.5 px-3 text-center text-xs">
+                        ${isDone ? `<span class="text-emerald-400 font-mono font-bold">${formattedTime}</span>` : `<span class="text-slate-500">-</span>`}
+                      </td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+      </div>
+    `;
+  }).join("");
+}
+
+// حذف كشف وارد
+async function handleDeleteIncomingRequest(requestId, event) {
+  if (event) event.stopPropagation();
+  if (confirm("هل أنت متأكد من رغبتك في حذف هذا الكشف الوارد نهائياً؟")) {
+    await window.firebaseService.deleteWithdrawalRequest(requestId);
+    showToast("تم الحذف 🗑️", "تم حذف الكشف الوارد بنجاح", "info");
+    updateDashboardData();
+  }
+}
+
+// تبديل حالة الطالب
+async function handleToggleStudentStatus(requestId, studentId, newCompletedState) {
+  if (!currentUser) return;
+
+  try {
+    const res = await window.firebaseService.updateStudentInRequest(
+      requestId,
+      studentId,
+      { isCompleted: newCompletedState },
+      currentUser
+    );
+
+    if (res.success) {
+      showToast("تحديث الحالة", newCompletedState ? `تم تأكيد سحب ملف: "${res.student.name}" ✅` : `تم إلغاء تأكيد السحب`, newCompletedState ? "success" : "info");
+      updateDashboardData();
+    }
+  } catch (err) {
+    showToast("خطأ", "تعذر تحديث حالة الطالب", "error");
+  }
+}
+
+// حفظ ملاحظات الطالب
+function handleStudentNoteInputChanged(requestId, studentId, noteVal) {
+  if (noteSaveDebounceTimers[studentId]) {
+    clearTimeout(noteSaveDebounceTimers[studentId]);
+  }
+  noteSaveDebounceTimers[studentId] = setTimeout(async () => {
+    await saveStudentNoteFinal(requestId, studentId, noteVal);
+  }, 700);
+}
+
+function handleStudentNoteBlur(requestId, studentId, noteVal) {
+  if (noteSaveDebounceTimers[studentId]) {
+    clearTimeout(noteSaveDebounceTimers[studentId]);
+  }
+  saveStudentNoteFinal(requestId, studentId, noteVal);
+}
+
+async function saveStudentNoteFinal(requestId, studentId, noteVal) {
+  if (!currentUser) return;
+  try {
+    await window.firebaseService.updateStudentInRequest(
+      requestId,
+      studentId,
+      { notes: noteVal.trim() },
+      currentUser
+    );
+  } catch (err) {
+    console.warn("Save note error:", err);
+  }
+}
+
+// إرسال تقرير حالة الكشف للواتساب للمسؤول المرسل
+function sendIncomingStatusReportToWhatsApp(requestId) {
+  const req = allRequests.find((r) => r.id === requestId);
+  if (!req) return;
+
+  const students = req.students || [];
+  const lines = students.map((st, idx) => {
+    const statusText = st.isCompleted ? "✅ تم السحب" : "⏳ قيد السحب";
+    const noteText = st.notes ? ` (ملاحظات: ${st.notes})` : "";
+    return `${idx + 1}. ${st.name} : ${statusText}${noteText}`;
+  });
+
+  const waPhone = getWhatsAppPhoneNumber(req.senderPhone);
+  const message = `الساده مسئول شئون طلاب جامعة ${req.senderUniversity}
+تحية طيبة وبعد،
+
+إفادة بشأن كشف سحب الطلاب الموجه لجامعة ${req.targetUniversity}:
+${lines.join("\n")}
+
+شاكرين لسيادتكم وافر التعاون والتقدير.
+${currentUser ? currentUser.fullName : 'مسؤول شئون الطلاب'}
+${currentUser ? currentUser.university : ''}`;
+
+  const url = `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(message)}`;
+  window.open(url, "_blank");
+  showToast("تم فتح الواتساب 📲", "تم تجهيز تقرير حالة الطلاب وإرساله للمسؤول", "success");
+}
+
+// ==========================================
+// 8. إرسال كشف سحب جديد (مبسط ومباشر مع إظهار بيانات مسؤول الجامعة)
+// ==========================================
+
+function handleTargetUniversityChanged(uniName) {
+  const infoBox = document.getElementById("targetRepInfoBox");
+  const notFoundBox = document.getElementById("targetRepNotFoundBox");
+  const repName = document.getElementById("targetRepName");
+  const repPhone = document.getElementById("targetRepPhone");
+  const callLink = document.getElementById("targetRepCallLink");
+  const waLink = document.getElementById("targetRepWaLink");
+
+  if (!infoBox) return;
+
+  const cleanUni = normalizeArabic(uniName || "");
+  if (!cleanUni) {
+    infoBox.classList.add("hidden");
+    if (notFoundBox) notFoundBox.classList.add("hidden");
+    return;
+  }
+
+  // البحث في ممثلي الجامعات وقائمة المستخدمين المسجلين
+  let found = allRepresentatives.find((r) => normalizeArabic(r.university || "") === cleanUni);
+  if (!found) {
+    found = allUsers.find((u) => normalizeArabic(u.university || "") === cleanUni);
+  }
+
+  if (found) {
+    infoBox.classList.remove("hidden");
+    if (notFoundBox) notFoundBox.classList.add("hidden");
+    if (repName) repName.innerText = found.fullName || "مسؤول شئون الطلاب";
+    if (repPhone) repPhone.innerText = found.phone || "";
+    if (callLink) callLink.href = `tel:${found.phone}`;
+    if (waLink) {
+      waLink.href = `https://api.whatsapp.com/send?phone=${getWhatsAppPhoneNumber(found.phone)}`;
+    }
+  } else {
+    infoBox.classList.add("hidden");
+    if (notFoundBox) notFoundBox.classList.remove("hidden");
+  }
+}
+
+function onRequestStudentsInputChanged(text) {
+  const countBadge = document.getElementById("requestStudentsCountBadge");
+  const count = countStudentsInText(text);
+  if (countBadge) {
+    countBadge.innerText = `${count} ${count === 1 ? 'طالب' : 'طلاب'}`;
+  }
+  renderRequestStudentsPreview(text);
+}
+
+// ==========================================
+// معاينة حية تلقائية: بمجرد اللصق يفهم النظام وجود
+// الرقم القومي ويضعه في عمود مستقل قبل الإرسال
+// ==========================================
+
+function renderRequestStudentsPreview(rawText) {
+  const preview = document.getElementById("requestStudentsPreview");
+  if (!preview) return;
+
+  const entries = extractStudentsDetailed(rawText || "");
+  const nidCount = entries.filter((e) => e.nationalId).length;
+
+  if (entries.length === 0) {
+    preview.classList.add("hidden");
+    preview.innerHTML = "";
+    return;
+  }
+
+  preview.classList.remove("hidden");
+
+  const rows = entries.map((e, i) => `
+    <tr class="border-b border-white/5 last:border-0">
+      <td class="py-1.5 px-2.5 text-center font-mono text-slate-500">${i + 1}</td>
+      <td class="py-1.5 px-2.5 font-bold text-slate-100">${escapeHtml(e.name || "—")}</td>
+      <td class="py-1.5 px-2.5 text-center">
+        ${
+          e.nationalId
+            ? `<span class="font-mono text-emerald-300 font-bold text-xs whitespace-nowrap" dir="ltr">${escapeHtml(e.nationalId)} <i class="fa-solid fa-circle-check text-[10px] text-emerald-400"></i></span>`
+            : `<span class="text-slate-600 text-xs italic">—</span>`
+        }
+      </td>
+    </tr>
+  `).join("");
+
+  preview.innerHTML = `
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-1.5">
+      <span class="text-[11px] font-bold text-blue-300 flex items-center gap-1.5">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> فهم تلقائي: الأرقام القومية انتقلت لعمودها
+      </span>
+      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${nidCount > 0 ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25' : 'bg-slate-800 text-slate-500 border border-white/10'}">
+        ${nidCount > 0 ? `تم التعرف على ${nidCount} رقم قومي تلقائياً ✔` : 'لم يتم التعرف على أرقام قومية بعد'}
+      </span>
+    </div>
+    <div class="overflow-x-auto rounded-xl border border-white/10 bg-slate-900/60">
+      <table class="w-full text-right text-xs">
+        <thead>
+          <tr class="bg-slate-800/80 text-slate-400 text-[10px] font-bold">
+            <th class="py-1.5 px-2.5 w-8 text-center">م</th>
+            <th class="py-1.5 px-2.5">اسم الطالب</th>
+            <th class="py-1.5 px-2.5 w-36 text-center">الرقم القومي (تلقائي)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function clearNewRequestStudents() {
+  const textarea = document.getElementById("requestStudentsTextarea");
+  if (!textarea) return;
+  textarea.value = "";
+  onRequestStudentsInputChanged("");
+}
+
+async function handleCreateRequestSubmit(e) {
+  e.preventDefault();
+  if (!currentUser) {
+    showToast("تنبيه", "يرجى تسجيل الدخول أولاً", "error");
+    return;
+  }
+
+  const uniInput = document.getElementById("targetUniversityInput");
+  const textarea = document.getElementById("requestStudentsTextarea");
+  const submitBtn = document.getElementById("submitRequestBtn");
+
+  const targetUni = uniInput.value.trim();
+  const rawStudents = textarea.value.trim();
+
+  if (!targetUni) {
+    showToast("تنبيه", "يرجى تحديد الجامعة المستهدفة", "error");
+    uniInput.focus();
+    return;
+  }
+
+  if (!rawStudents) {
+    showToast("تنبيه", "يرجى إدخال أسماء الطلاب المراد سحبهم", "error");
+    textarea.focus();
+    return;
+  }
+
+  const studentEntries = extractStudentsDetailed(rawStudents);
+  if (studentEntries.length === 0) {
+    showToast("تنبيه", "لم يتم العثور على أي أسماء طلاب صالحة", "error");
+    return;
+  }
+  const studentsWithNationalId = studentEntries.filter((s) => s.nationalId).length;
+
+  let rep = allRepresentatives.find((r) => normalizeArabic(r.university || "") === normalizeArabic(targetUni));
+  if (!rep) {
+    rep = allUsers.find((u) => normalizeArabic(u.university || "") === normalizeArabic(targetUni));
+  }
+
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>جاري الإرسال...</span>`;
+
+  try {
+    const requestData = {
+      senderId: currentUser.id,
+      senderName: currentUser.fullName,
+      senderUniversity: currentUser.university,
+      senderPhone: currentUser.phone,
+      senderWhatsApp: getWhatsAppPhoneNumber(currentUser.phone),
+      targetUniversity: targetUni,
+      targetRepresentativeName: rep ? rep.fullName : "",
+      targetRepresentativePhone: rep ? rep.phone : "",
+      title: `كشف سحب طلاب لجامعة ${targetUni}`,
+      notes: "",
+      studentsList: studentEntries
+    };
+
+    const res = await window.firebaseService.createWithdrawalRequest(requestData);
+
+    if (res.success) {
+      showToast(
+        "تم إرسال الكشف بنجاح 🚀",
+        `تم إرسال كشف يضم ${studentEntries.length} طلاب لجامعة ${targetUni}` +
+        (studentsWithNationalId > 0 ? ` (مسجل الأرقام القومية: ${studentsWithNationalId})` : ""),
+        "success"
+      );
+      e.target.reset();
+      onRequestStudentsInputChanged("");
+      const infoBox = document.getElementById("targetRepInfoBox");
+      if (infoBox) infoBox.classList.add("hidden");
+      setTimeout(() => switchDashTab("outgoing"), 400);
+    }
+  } catch (err) {
+    console.error("Create request error:", err);
+    showToast("خطأ", "حدث خطأ أثناء إرسال الكشف", "error");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+}
+
+function sendNewRequestViaWhatsApp() {
+  const uniInput = document.getElementById("targetUniversityInput");
+  const textarea = document.getElementById("requestStudentsTextarea");
+
+  const targetUni = uniInput.value.trim();
+  const rawStudents = textarea.value.trim();
+
+  if (!targetUni) {
+    showToast("تنبيه", "يرجى تحديد اسم الجامعة المستهدفة أولاً", "error");
+    uniInput.focus();
+    return;
+  }
+
+  if (!rawStudents) {
+    showToast("تنبيه", "يرجى كتابة أسماء الطلاب أولاً", "error");
+    textarea.focus();
+    return;
+  }
+
+  let rep = allRepresentatives.find((r) => normalizeArabic(r.university || "") === normalizeArabic(targetUni));
+  if (!rep) {
+    rep = allUsers.find((u) => normalizeArabic(u.university || "") === normalizeArabic(targetUni));
+  }
+  const phone = rep ? rep.phone : "";
+
+  const numberedStudents = formatStudentsToNumberedPoints(rawStudents);
+  const message = generateWhatsAppMessageText(targetUni, numberedStudents);
+
+  const waPhone = phone ? getWhatsAppPhoneNumber(phone) : "";
+  const waUrl = waPhone 
+    ? `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(message)}`
+    : `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+
+  window.open(waUrl, "_blank");
+  showToast("تم فتح محادثة الواتساب 📲", "تم تجهيز الرسالة بالصيغة الرسمية المعتمدة", "success");
+}
+
+// ==========================================
+// 9. متابعة كشوفاتي الصادرة (مع إمكانية الحذف)
+// ==========================================
+
+function handleOutgoingSearch(val) {
+  currentOutgoingSearchQuery = val || "";
+  renderOutgoingRequests();
+}
+
+// تمديد وطي الكشوف الصادرة — نفس نظام الكشوف الواردة تماماً
+function toggleOutgoingRequestExpand(requestId, event) {
+  if (event) event.stopPropagation();
+  const bodyEl = document.getElementById(`outgoing-body-${requestId}`);
+  const iconEl = document.getElementById(`outgoing-expand-icon-${requestId}`);
+  const labelEl = document.getElementById(`outgoing-expand-label-${requestId}`);
+
+  if (expandedOutgoingRequests.has(requestId)) {
+    expandedOutgoingRequests.delete(requestId);
+    if (bodyEl) bodyEl.classList.add("hidden");
+    if (iconEl) iconEl.className = "fa-solid fa-plus";
+    if (labelEl) labelEl.innerText = "انقر للتمديد وعرض أسماء الطلاب 🔽";
+  } else {
+    expandedOutgoingRequests.add(requestId);
+    if (bodyEl) bodyEl.classList.remove("hidden");
+    if (iconEl) iconEl.className = "fa-solid fa-minus";
+    if (labelEl) labelEl.innerText = "انقر لطي الكشف 🔼";
+  }
+}
+
+function expandAllOutgoingRequests() {
+  const userPhoneClean = cleanPhoneNumber(currentUser ? currentUser.phone || "" : "");
+  allRequests
+    .filter((r) => r.senderId === (currentUser ? currentUser.id : "") || cleanPhoneNumber(r.senderPhone || "") === userPhoneClean)
+    .forEach((r) => expandedOutgoingRequests.add(r.id));
+  renderOutgoingRequests();
+}
+
+function collapseAllOutgoingRequests() {
+  expandedOutgoingRequests.clear();
+  renderOutgoingRequests();
+}
+
+function renderOutgoingRequests() {
+  const container = document.getElementById("outgoingRequestsContainer");
+  const emptyState = document.getElementById("outgoingEmptyState");
+  const countDisplay = document.getElementById("outgoingCountDisplay");
+  if (!container || !currentUser) return;
+
+  const userPhoneClean = cleanPhoneNumber(currentUser.phone);
+  let requests = allRequests.filter((r) => {
+    return r.senderId === currentUser.id || cleanPhoneNumber(r.senderPhone) === userPhoneClean;
+  });
+
+  if (currentOutgoingSearchQuery && currentOutgoingSearchQuery.trim() !== "") {
+    const qTerms = normalizeArabic(currentOutgoingSearchQuery).split(/\s+/).filter(Boolean);
+    requests = requests.filter((req) => {
+      const fullText = normalizeArabic(
+        `${req.targetUniversity || ""} ${(req.students || []).map((s) => `${s.name} ${s.nationalId || ""}`).join(" ")}`
+      );
+      return qTerms.every((term) => fullText.includes(term));
+    });
+  }
+
+  if (countDisplay) countDisplay.innerText = requests.length;
+
+  if (requests.length === 0) {
+    container.innerHTML = "";
+    if (emptyState) emptyState.classList.remove("hidden");
+    return;
+  }
+
+  if (emptyState) emptyState.classList.add("hidden");
+
+  container.innerHTML = requests.map((req) => {
+    const students = req.students || [];
+    const totalCount = students.length;
+    const completedCount = students.filter((s) => s.isCompleted).length;
+    const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+    const formattedDate = new Date(req.createdAt || Date.now()).toLocaleDateString("ar-EG", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+    const isExpanded = expandedOutgoingRequests.has(req.id);
+
+    return `
+      <div class="glass-card p-4 sm:p-5 border border-white/10 shadow transition-all" id="outgoing-card-${req.id}">
+
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${isExpanded ? 'border-b border-white/10 pb-3.5' : ''}">
+
+          <div class="flex items-start gap-3 flex-1 cursor-pointer select-none" onclick="toggleOutgoingRequestExpand('${req.id}', event)">
+            <!-- زر + أو - للتمديد والطي (مثل الكشوف الواردة) -->
+            <button
+              type="button"
+              onclick="toggleOutgoingRequestExpand('${req.id}', event)"
+              class="w-9 h-9 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 flex items-center justify-center text-sm font-bold transition-all cursor-pointer shadow flex-shrink-0 mt-0.5"
+              title="${isExpanded ? 'طي الكشف' : 'تمديد وعرض أسماء الطلاب'}"
+            >
+              <i id="outgoing-expand-icon-${req.id}" class="fa-solid ${isExpanded ? 'fa-minus' : 'fa-plus'}"></i>
+            </button>
+
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h4 class="text-sm sm:text-base font-bold text-white leading-tight">
+                  كشف مرسل إلى: <span class="text-amber-300 font-extrabold">${escapeHtml(req.targetUniversity)}</span>
+                </h4>
+                <span class="px-2 py-0.5 rounded-full text-xs font-bold font-mono ${
+                  completedCount === totalCount && totalCount > 0
+                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                    : 'bg-blue-500/15 text-blue-300 border border-blue-500/25'
+                }">
+                  ${completedCount} / ${totalCount} تم سحبهم (${progressPercent}%)
+                </span>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
+                <span>تاريخ الإرسال: ${formattedDate}</span>
+                ${req.targetRepresentativeName ? `<span>• مسؤول الجامعة: ${escapeHtml(req.targetRepresentativeName)}</span>` : ''}
+              </div>
+              <p id="outgoing-expand-label-${req.id}" class="text-[11px] text-blue-300/80 font-medium mt-1">
+                ${isExpanded ? 'انقر لطي الكشف 🔼' : `انقر للتمديد وعرض أسماء الطلاب (${totalCount} طالب) 🔽`}
+              </p>
+            </div>
+          </div>
+
+          <!-- أزرار الإجراءات للكشف الصادر: مراسلة واتساب + حذف الكشف -->
+          <div class="flex items-center gap-2 w-full sm:w-auto justify-end pt-1 sm:pt-0" onclick="event.stopPropagation()">
+            ${
+              req.targetRepresentativePhone
+                ? `<a 
+                    href="https://api.whatsapp.com/send?phone=${getWhatsAppPhoneNumber(req.targetRepresentativePhone)}" 
+                    target="_blank" 
+                    class="btn-whatsapp px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow"
+                    title="مراسلة مسؤول الجامعة على الواتساب"
+                  >
+                    <i class="fa-brands fa-whatsapp"></i>
+                    <span>مراسلة المسؤول</span>
+                  </a>`
+                : ''
+            }
+            
+            <!-- زر حذف الكشف الصادر -->
+            <button 
+              onclick="handleDeleteOutgoingRequest('${req.id}', event)"
+              class="btn-danger px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+              title="حذف هذا الكشف الصادر نهائياً"
+            >
+              <i class="fa-regular fa-trash-can"></i>
+              <span>حذف</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- جسم الكشف الصادر القابل للتمديد والطي (افتراضياً متقلص زي الواردة) -->
+        <div id="outgoing-body-${req.id}" class="${isExpanded ? '' : 'hidden'} space-y-3.5 pt-3.5">
+
+          <div class="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-blue-500 to-emerald-400 progress-fill rounded-full" style="width: ${progressPercent}%"></div>
+          </div>
+
+          <!-- جدول متابعة الطلاب والملاحظات المكتوبة من الطرف الآخر -->
+        <div class="overflow-x-auto rounded-xl border border-white/10 bg-slate-900/60">
+          <table class="w-full text-right border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="bg-slate-800/80 text-amber-300 border-b border-white/10 text-xs font-bold">
+                <th class="py-2.5 px-3 w-10 text-center">#</th>
+                <th class="py-2.5 px-3 min-w-[190px]">اسم الطالب</th>
+                <th class="py-2.5 px-3 min-w-[150px] text-center">الرقم القومي</th>
+                <th class="py-2.5 px-3 min-w-[140px] text-center">حالة السحب</th>
+                <th class="py-2.5 px-3 min-w-[240px]">ملاحظات مسؤولي جامعة (${escapeHtml(req.targetUniversity)})</th>
+                <th class="py-2.5 px-3 min-w-[110px] text-center">الوقت</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              ${students.map((st, idx) => {
+                const isDone = !!st.isCompleted;
+                const formattedTime = st.completedAt 
+                  ? new Date(st.completedAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })
+                  : "";
+
+                return `
+                  <tr class="hover:bg-slate-800/30 transition-colors ${isDone ? 'bg-emerald-500/5' : ''}">
+                    <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-400">${idx + 1}</td>
+                    <td class="py-2.5 px-3 font-bold text-white">
+                      <span class="${isDone ? 'text-emerald-300' : 'text-slate-100'}">${escapeHtml(st.name)}</span>
+                    </td>
+                    <!-- الرقم القومي -->
+                    <td class="py-2.5 px-3 text-center">
+                      ${
+                        st.nationalId && String(st.nationalId).trim()
+                          ? `<span class="font-mono text-slate-200 font-bold text-xs" dir="ltr">${escapeHtml(st.nationalId)}</span>`
+                          : `<span class="text-slate-500 text-xs italic">غير مسجل</span>`
+                      }
+                    </td>
+                    <td class="py-2.5 px-3 text-center">
+                      <span class="px-2.5 py-0.5 rounded-md text-xs font-bold inline-flex items-center gap-1 ${
+                        isDone 
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
+                      }">
+                        ${isDone ? 'تم السحب ✅' : 'قيد المتابعة ⏳'}
+                      </span>
+                    </td>
+                    <td class="py-2.5 px-3">
+                      ${
+                        st.notes && st.notes.trim().length > 0
+                          ? `<span class="text-amber-200 text-xs font-medium">${escapeHtml(st.notes)}</span>`
+                          : `<span class="text-slate-500 italic text-xs">لا توجد ملاحظات مسجلة بعد</span>`
+                      }
+                    </td>
+                    <td class="py-2.5 px-3 text-center text-xs font-mono text-slate-400">
+                      ${isDone ? formattedTime : '-'}
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+
+        </div>
+
+      </div>
+    `;
+  }).join("");
+}
+
+// حذف كشف صادر
+async function handleDeleteOutgoingRequest(requestId, event) {
+  if (event) event.stopPropagation();
+  if (confirm("هل أنت متأكد من رغبتك في حذف هذا الكشف الصادر نهائياً؟")) {
+    await window.firebaseService.deleteWithdrawalRequest(requestId);
+    showToast("تم الحذف 🗑️", "تم حذف الكشف الصادر بنجاح", "info");
+    updateDashboardData();
+  }
+}
+
+// ==========================================
+// 10. مركز الإشعارات والتنبيهات الحية
+// ==========================================
+
+function isNotificationForCurrentUser(notif) {
+  if (!currentUser || !notif) return false;
+  const userPhoneClean = cleanPhoneNumber(currentUser.phone);
+  const userUniNorm = normalizeArabic(currentUser.university || "");
+
+  const matchesIdentity = (
+    notif.recipientUserId === currentUser.id ||
+    notif.recipientUserId === currentUser.phone ||
+    notif.recipientUserId === userPhoneClean ||
+    notif.recipientUserId === ("usr_" + userPhoneClean)
+  );
+
+  const notifSenderExcluded =
+    (notif.senderUserId && notif.senderUserId === currentUser.id) ||
+    (notif.senderPhone && userPhoneClean && cleanPhoneNumber(notif.senderPhone) === userPhoneClean);
+
+  const isNewRequest = (notif.type || "") === "new_request";
+
+  // 1) مرشح: الإشعار موجه لمستخدم معين (recipientUserId)
+  if (matchesIdentity) {
+    if (isNewRequest && notifSenderExcluded) return false; // المرسل لا يرى "واردكم كشف" عن طلبه
+    if (isNewRequest && notif.targetUniversity) {
+      if (normalizeArabic(notif.targetUniversity) !== userUniNorm) return false;
+    }
+    return true;
+  }
+
+  // 2) مرشح: الإشعار موجه لجامعة بأكملها (recipientUniversity) — حد الأمان للطلبات
+  const recipientUni = String(notif.recipientUniversity || "").trim();
+  if (recipientUni && normalizeArabic(recipientUni) === userUniNorm) {
+    if (isNewRequest && notifSenderExcluded) return false;
+    if (isNewRequest && notif.targetUniversity) {
+      if (normalizeArabic(notif.targetUniversity) !== userUniNorm) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function renderNotifications() {
+  const container = document.getElementById("notificationsListContainer");
+  const emptyState = document.getElementById("notificationsEmptyState");
+  const badge = document.getElementById("unreadNotifsBadge");
+  if (!container || !currentUser) return;
+
+  const userNotifs = allNotifications.filter((n) => isNotificationForCurrentUser(n));
+  const unreadCount = userNotifs.filter((n) => !n.isRead).length;
+
+  if (badge) {
+    if (unreadCount > 0) {
+      badge.innerText = unreadCount;
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+
+  if (userNotifs.length === 0) {
+    container.innerHTML = "";
+    if (emptyState) emptyState.classList.remove("hidden");
+    return;
+  }
+
+  if (emptyState) emptyState.classList.add("hidden");
+
+  container.innerHTML = userNotifs.map((n) => {
+    const isUnread = !n.isRead;
+    const timeAgo = getTimeAgoArabic(n.createdAt);
+
+    let iconClass = "fa-bell text-amber-400";
+    if (n.type === "status_changed") iconClass = "fa-circle-check text-emerald-400";
+    if (n.type === "notes_updated") iconClass = "fa-pen-to-square text-blue-400";
+    if (n.type === "new_request") iconClass = "fa-envelope text-purple-400";
+
+    return `
+      <div 
+        onclick="handleNotificationClick('${n.id}', '${n.requestId}')" 
+        class="notification-item p-2.5 rounded-xl border border-white/5 cursor-pointer ${
+          isUnread ? 'unread' : 'bg-slate-900/40'
+        }"
+      >
+        <div class="flex items-start gap-2">
+          <i class="fa-solid ${iconClass} mt-1 text-xs"></i>
+          <div class="flex-1 text-right">
+            <p class="text-xs text-slate-100 leading-relaxed font-semibold">
+              ${escapeHtml(n.message)}
+            </p>
+            <span class="text-[10px] text-slate-400 font-mono mt-0.5 block">${timeAgo}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function toggleNotificationsModal() {
+  const modal = document.getElementById("notificationsModal");
+  if (!modal) return;
+  modal.classList.toggle("hidden");
+  if (!modal.classList.contains("hidden")) {
+    renderNotifications();
+  }
+}
+
+async function handleNotificationClick(notifId, requestId) {
+  await window.firebaseService.markNotificationAsRead(notifId);
+  renderNotifications();
+  toggleNotificationsModal();
+
+  if (requestId) {
+    switchMainView("dashboard");
+    switchDashTab("outgoing");
+  }
+}
+
+async function markAllNotifsAsRead() {
+  if (!currentUser) return;
+  await window.firebaseService.markAllNotificationsAsRead(currentUser.id);
+  renderNotifications();
+  showToast("تم التحديد", "تم تمييز جميع الإشعارات كمقروءة", "info");
+}
+
+function getTimeAgoArabic(timestamp) {
+  if (!timestamp) return "";
+  const now = Date.now();
+  const diff = Math.max(0, now - timestamp);
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) return "الآن";
+  if (minutes < 60) return `منذ ${minutes} دقيقة`;
+  if (hours < 24) return `منذ ${hours} ساعة`;
+  return `منذ ${days} يوم`;
+}
+
+function playNotificationChime() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    const osc1 = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+    osc1.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+
+    gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+
+    osc1.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc1.start();
+    osc1.stop(ctx.currentTime + 0.35);
+  } catch (e) {
+    // ignore
+  }
+}
+
+// ==========================================
+// 11. تنسيق الطلاب ورسائل الواتساب
+// ==========================================
+
 function formatStudentsToNumberedPoints(rawText) {
   if (!rawText) return "";
 
-  // فحص ما إذا كان النص سطراً واحداً ومفصولاً بفواصل مثل ، أو , أو ؛
   let items = [];
   if (!rawText.includes("\n") && (rawText.includes("،") || rawText.includes(",") || rawText.includes("؛"))) {
     items = rawText.split(/[،,؛]+/);
@@ -349,27 +1540,133 @@ function formatStudentsToNumberedPoints(rawText) {
     items = rawText.split(/\r?\n/);
   }
 
-  const cleanedStudents = [];
-
+  const cleaned = [];
   items.forEach((line) => {
     let cleanLine = line.trim();
     if (!cleanLine) return;
-
-    // تنظيف أي ترقيم سابق مثل "1.", "1 -", "-", "*", "•", "(1)", "1)"
-    cleanLine = cleanLine.replace(/^[\(\[\{]?[\d٠-٩]+[\)\]\}]?[\.\-\:\s]+/, "");
+    cleanLine = cleanLine.replace(/^[\(\[\{]?[\d٠-٩]{1,3}[\)\]\}]?[\.\-\:\s]+/, "");
     cleanLine = cleanLine.replace(/^[-*•،,؛\s]+/, "");
     cleanLine = cleanLine.trim();
-
     if (cleanLine.length > 0) {
-      cleanedStudents.push(cleanLine);
+      cleaned.push(cleanLine);
     }
   });
 
-  // إعادة الترقيم التسلسلي
-  return cleanedStudents.map((student, index) => `${index + 1}. ${student}`).join("\n");
+  return cleaned.map((student, index) => `${index + 1}. ${student}`).join("\n");
 }
 
-// استخراج عدد الطلاب من النص بدقة
+function extractStudentsArray(rawText) {
+  if (!rawText) return [];
+  let items = [];
+  if (!rawText.includes("\n") && (rawText.includes("،") || rawText.includes(",") || rawText.includes("؛"))) {
+    items = rawText.split(/[،,؛]+/);
+  } else {
+    items = rawText.split(/\r?\n/);
+  }
+
+  const cleaned = [];
+  items.forEach((line) => {
+    let cleanLine = line.trim();
+    if (!cleanLine) return;
+    cleanLine = cleanLine.replace(/^[\(\[\{]?[\d٠-٩]{1,3}[\)\]\}]?[\.\-\:\s]+/, "");
+    cleanLine = cleanLine.replace(/^[-*•،,؛\s]+/, "");
+    cleanLine = cleanLine.trim();
+    if (cleanLine.length > 0) {
+      cleaned.push(cleanLine);
+    }
+  });
+
+  return cleaned;
+}
+
+// ==========================================
+// الرقم القومي: استخراجه تلقائياً من سطر الاسم
+// الصيغ المدعومة (كلها تلقائية بدون فصل يدوي):
+//   لصق إكسيل عمودين: "اسم الطالب<TAB>31234567890123" أو "31234567890123<TAB>اسم الطالب"
+//   "اسم الطالب 31234567890123"
+//   "اسم الطالب | 31234567890123"
+//   "اسم الطالب - ٢١٠١٠١٠١٠١٠١٢٣"
+//   "3120 3010 1010 1234" (الرقم مقسم لمجموعات بمسافات أو شرطات)
+// ==========================================
+
+function extractNationalIdFromLine(line) {
+  const englishDigits = convertArabicNumeralsToEnglish(String(line || ""));
+
+  // اختيار أفضل مرشّح: الأقرب للطول الرسمي 14 خانة (النطاق المقبول 12-15)
+  const pickBest = (candidates) => {
+    let best = "";
+    (candidates || []).forEach((r) => {
+      if (!best || Math.abs(r.length - 14) < Math.abs(best.length - 14)) best = r;
+    });
+    return best;
+  };
+
+  // 1) رقماً متصلاً في السطر
+  const best = pickBest(String(englishDigits).match(/[0-9]{12,15}/g) || []);
+  if (best) return best;
+
+  // 2) لصق من الإكسيل قد يفصل الرقم لمجموعات بمسافات أو شرطات — دمج المجموعات المتجاورة (13-15 خانة)
+  const groups = String(englishDigits).split(/[^0-9]+/).filter((g) => g);
+  let merged = "";
+  for (let i = 0; i < groups.length; i++) {
+    let acc = "";
+    for (let j = i; j < groups.length; j++) {
+      acc += groups[j];
+      if (acc.length > 15) break;
+      if (acc.length >= 13) {
+        if (!merged || Math.abs(acc.length - 14) < Math.abs(merged.length - 14)) merged = acc;
+      }
+    }
+  }
+  return merged;
+}
+
+function parseStudentEntryWithNationalId(rawLine) {
+  let line = String(rawLine || "").trim();
+  if (!line) return { name: "", nationalId: "" };
+
+  let nationalId = "";
+
+  // فاصل صريح | بين الاسم والرقم القومي
+  if (line.includes("|")) {
+    const parts = line.split("|").map((p) => p.trim()).filter(Boolean);
+    const withDigits = parts.filter((p) => /\d/.test(convertArabicNumeralsToEnglish(p)));
+    const nameParts = parts.filter((p) => !/\d/.test(convertArabicNumeralsToEnglish(p)));
+    if (withDigits.length > 0) {
+      nationalId = extractNationalIdFromLine(withDigits[0]);
+    }
+    line = nameParts.length > 0 ? nameParts.join(" ") : line.replace(/\|/g, " ");
+  }
+
+  // الرقم القومي في أي موضع بالسطر (قبله أو بعده كعمود إكسيل)
+  if (!nationalId) {
+    nationalId = extractNationalIdFromLine(line);
+  }
+
+  if (nationalId) {
+    // إزالة الرقم القومي من نص الاسم مع تسامح الفواصل/المسافات بين مجموعات الرقم
+    const englishedLine = convertArabicNumeralsToEnglish(line);
+    const nidFuzzy = new RegExp(nationalId.split("").map((d) => `[${d}]`).join("[\\s\\-\\./]?"), "g");
+    let cleaned = englishedLine.replace(nidFuzzy, " ");
+    // تنظيف خطوط الفصل المتروكة (تاب من عمود الإكسيل، شرطة، نقطتان)
+    cleaned = cleaned.replace(/[|]+/g, " ");
+    cleaned = cleaned.replace(/\s+[-–—:]+\s*/g, " ");
+    cleaned = cleaned.replace(/^[-–—:\s]+|[-–—:\s]+$/g, "");
+    line = cleaned.trim();
+  }
+
+  return {
+    name: line.replace(/\s+/g, " ").trim(),
+    nationalId
+  };
+}
+
+function extractStudentsDetailed(rawText) {
+  return extractStudentsArray(rawText)
+    .map(parseStudentEntryWithNationalId)
+    .filter((entry) => entry.name || entry.nationalId);
+}
+
 function countStudentsInText(text) {
   if (!text) return 0;
   if (!text.includes("\n") && (text.includes("،") || text.includes(",") || text.includes("؛"))) {
@@ -378,403 +1675,107 @@ function countStudentsInText(text) {
   return text.split(/\r?\n/).filter((l) => l.trim().length > 0).length;
 }
 
-// رندر السجلات في الجدول المنسق (للكمبيوتر) والبطاقات الذكية المستقلة (للهاتف المحمول)
-function renderRecords() {
-  const tableBody = document.getElementById("recordsTableBody");
-  const recordsContainer = document.getElementById("recordsContainer");
-  const mobileContainer = document.getElementById("mobileCardsContainer");
-  const emptyState = document.getElementById("emptyState");
-
-  if (!tableBody || !emptyState) return;
-
-  if (filteredRepresentatives.length === 0) {
-    tableBody.innerHTML = "";
-    if (mobileContainer) mobileContainer.innerHTML = "";
-    if (recordsContainer) recordsContainer.classList.add("hidden");
-    emptyState.classList.remove("hidden");
-    return;
-  }
-
-  emptyState.classList.add("hidden");
-  if (recordsContainer) recordsContainer.classList.remove("hidden");
-
-  // 1. توليد صفوف الجدول المنسق بالأعمدة (للشاشات الكبيرة والمتوسطة md فأعلى)
-  tableBody.innerHTML = filteredRepresentatives.map((rep, idx) => {
-    const studentCount = countStudentsInText(rep.studentsList || "");
-
-    return `
-      <tr class="hover:bg-slate-800/40 transition-colors border-b border-white/5" id="row-${rep.id}">
-        <!-- 1. # -->
-        <td class="py-4 px-3 text-center text-slate-400 font-mono font-bold text-xs align-middle">
-          ${idx + 1}
-        </td>
-
-        <!-- 2. الجامعة -->
-        <td class="py-4 px-4 align-middle">
-          <div class="flex items-center gap-2.5">
-            <span class="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <i class="fa-solid fa-landmark text-base"></i>
-            </span>
-            <span class="font-extrabold text-white text-base leading-snug">
-              ${escapeHtml(rep.university)}
-            </span>
-          </div>
-        </td>
-
-        <!-- 3. اسم المسؤول -->
-        <td class="py-4 px-4 align-middle">
-          <div class="flex items-center gap-2 text-slate-100 font-bold text-sm">
-            <div class="w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-amber-300 text-xs shadow-inner">
-              <i class="fa-solid fa-user-tie"></i>
-            </div>
-            <span>${escapeHtml(rep.fullName)}</span>
-          </div>
-        </td>
-
-        <!-- 4. رقم الموبايل -->
-        <td class="py-4 px-4 align-middle whitespace-nowrap">
-          <div class="flex items-center gap-2">
-            <a 
-              href="tel:${rep.phone}" 
-              class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-emerald-400 font-mono font-bold text-sm flex items-center gap-2 transition-colors"
-              title="اتصال هاتفي"
-            >
-              <i class="fa-solid fa-phone text-xs"></i>
-              <span dir="ltr">${escapeHtml(rep.phone)}</span>
-            </a>
-            <button 
-              onclick="copyToClipboard('${rep.phone}', 'تم نسخ رقم الموبايل')" 
-              class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer text-xs"
-              title="نسخ الرقم"
-            >
-              <i class="fa-regular fa-copy"></i>
-            </button>
-          </div>
-        </td>
-
-        <!-- 5. أسماء الطلاب المراد سحبهم -->
-        <td class="py-4 px-4 align-top min-w-[480px]">
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                <i class="fa-solid fa-users text-amber-400"></i>
-                <span>أسماء الطلاب المراد سحبهم:</span>
-              </span>
-              <span id="badge-count-${rep.id}" class="px-2.5 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-white/10 font-mono text-xs font-bold">
-                ${studentCount} ${studentCount === 1 ? 'طالب' : 'طلاب'}
-              </span>
-            </div>
-            <textarea 
-              id="students-input-${rep.id}"
-              oninput="onStudentsInputChanged('${rep.id}', false)"
-              placeholder="ألصق أو اكتب أسماء الطلاب هنا (يقبل النسخ واللصق من إكسيل، طالب في كل سطر)..."
-              class="students-textarea glass-input w-full p-3.5 rounded-2xl text-sm placeholder-slate-500 text-slate-100 min-h-[120px] resize-y leading-relaxed"
-              rows="4"
-            >${escapeHtml(rep.studentsList || '')}</textarea>
-          </div>
-        </td>
-
-        <!-- 6. زر إرسال الواتس فقط -->
-        <td class="py-4 px-3 align-middle text-center w-28">
-          <button 
-            onclick="sendViaWhatsApp('${rep.id}', false)"
-            class="btn-whatsapp py-2 px-3 rounded-xl inline-flex items-center justify-center gap-1.5 font-bold text-xs shadow-md cursor-pointer hover:scale-105 transition-all whitespace-nowrap"
-            title="إرسال طلب السحب للواتس"
-          >
-            <i class="fa-brands fa-whatsapp text-sm"></i>
-            <span>إرسال 📲</span>
-          </button>
-        </td>
-      </tr>
-    `;
-  }).join("");
-
-  // 2. توليد البطاقات الذكية المتوافقة 100% مع الهواتف الذكية (أقل من md)
-  if (mobileContainer) {
-    mobileContainer.innerHTML = filteredRepresentatives.map((rep, idx) => {
-      const studentCount = countStudentsInText(rep.studentsList || "");
-
-      return `
-        <div class="glass-card rounded-2xl p-4 border border-white/10 space-y-3.5 shadow-xl" id="mobile-card-${rep.id}">
-          <!-- رأس الكرت: اسم الجامعة والمسؤول والترتيب -->
-          <div class="flex items-start justify-between gap-2 border-b border-white/10 pb-3">
-            <div class="flex items-start gap-2.5">
-              <span class="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 text-sm mt-0.5">
-                <i class="fa-solid fa-landmark"></i>
-              </span>
-              <div>
-                <span class="font-extrabold text-white text-base block leading-snug">
-                  ${escapeHtml(rep.university)}
-                </span>
-                <span class="text-xs text-slate-300 font-semibold flex items-center gap-1.5 mt-1">
-                  <i class="fa-solid fa-user-tie text-amber-400 text-xs"></i>
-                  <span>${escapeHtml(rep.fullName)}</span>
-                </span>
-              </div>
-            </div>
-            <span class="px-2.5 py-1 rounded-full bg-slate-800 border border-white/10 text-amber-300 font-mono font-bold text-xs">
-              #${idx + 1}
-            </span>
-          </div>
-
-          <!-- شريط الاتصال السريع ونسخ الهاتف -->
-          <div class="flex items-center justify-between gap-2 bg-slate-900/60 p-2.5 rounded-xl border border-white/5">
-            <a 
-              href="tel:${rep.phone}" 
-              class="text-emerald-400 font-mono font-bold text-xs flex items-center gap-2"
-              title="اتصال هاتفي مباشر"
-            >
-              <span class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">
-                <i class="fa-solid fa-phone"></i>
-              </span>
-              <span dir="ltr">${escapeHtml(rep.phone)}</span>
-            </a>
-            <button 
-              onclick="copyToClipboard('${rep.phone}', 'تم نسخ رقم الموبايل')" 
-              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors border border-white/5"
-            >
-              <i class="fa-regular fa-copy text-xs"></i>
-              <span>نسخ الرقم</span>
-            </button>
-          </div>
-
-          <!-- مساحة كتابة أسماء الطلاب المريحة لشاشة الموبايل -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between text-xs">
-              <label class="font-bold text-amber-300 flex items-center gap-1.5">
-                <i class="fa-solid fa-users text-amber-400"></i>
-                <span>أسماء الطلاب المراد سحبهم:</span>
-              </label>
-              <span id="badge-count-mobile-${rep.id}" class="px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 font-mono text-[11px] font-bold border border-white/10">
-                ${studentCount} ${studentCount === 1 ? 'طالب' : 'طلاب'}
-              </span>
-            </div>
-            <textarea 
-              id="students-input-mobile-${rep.id}"
-              oninput="onStudentsInputChanged('${rep.id}', true)"
-              placeholder="اكتب أو ألصق أسماء الطلاب هنا (طالب في كل سطر)..."
-              class="students-textarea glass-input w-full p-3 rounded-xl text-base placeholder-slate-500 text-slate-100 min-h-[95px] leading-relaxed"
-              rows="3"
-            >${escapeHtml(rep.studentsList || '')}</textarea>
-          </div>
-
-          <!-- زر إرسال واتساب مخصص للهواتف الذكية -->
-          <button 
-            onclick="sendViaWhatsApp('${rep.id}', true)"
-            class="btn-whatsapp w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-extrabold text-sm shadow-xl cursor-pointer active:scale-95 transition-transform"
-          >
-            <i class="fa-brands fa-whatsapp text-xl"></i>
-            <span>إرسال طلب السحب للواتس 📲</span>
-          </button>
-        </div>
-      `;
-    }).join("");
-  }
-}
-
-// مؤقتات الحفظ التلقائي لمنع كثرة الاستدعاءات
-let autoSaveDebounceTimers = {};
-
-// دالة مساعدة للحصول على حقل إدخال الطلاب بحسب وضع العرض النشط
-function getStudentsTextarea(id, preferMobile = false) {
-  const mobile = document.getElementById(`students-input-mobile-${id}`);
-  const desktop = document.getElementById(`students-input-${id}`);
-  if (preferMobile && mobile) return mobile;
-  if (window.innerWidth < 768 && mobile) return mobile;
-  return desktop || mobile;
-}
-
-// عند كتابة أو لصق نص في الـ Textarea لأي مسؤول مع مزامنة الموبايل والكمبيوتر
-function onStudentsInputChanged(id, isMobile = false) {
-  const textarea = getStudentsTextarea(id, isMobile);
-  if (!textarea) return;
-
-  const newText = textarea.value;
-
-  // تحديث الذاكرة فوراً ليعمل البحث الحي فوراً
-  const rep = allRepresentatives.find((r) => r.id === id);
-  if (rep) {
-    rep.studentsList = newText;
-  }
-
-  // مزامنة الحقل الآخر إن وُجد
-  const desktop = document.getElementById(`students-input-${id}`);
-  const mobile = document.getElementById(`students-input-mobile-${id}`);
-  if (isMobile && desktop) desktop.value = newText;
-  if (!isMobile && mobile) mobile.value = newText;
-
-  // تحديث العداد
-  const count = countStudentsInText(newText);
-  const textStr = `${count} ${count === 1 ? 'طالب' : 'طلاب'}`;
-  const badgeCount = document.getElementById(`badge-count-${id}`);
-  const badgeCountMobile = document.getElementById(`badge-count-mobile-${id}`);
-  if (badgeCount) badgeCount.innerText = textStr;
-  if (badgeCountMobile) badgeCountMobile.innerText = textStr;
-
-  // حفظ تلقائي في قاعدة البيانات بعد توقف الإدخال
-  if (autoSaveDebounceTimers[id]) clearTimeout(autoSaveDebounceTimers[id]);
-  autoSaveDebounceTimers[id] = setTimeout(() => {
-    window.firebaseService.update(id, { studentsList: newText });
-  }, 600);
-}
-
-// ترقيم الأسماء في البطاقة أو الجدول تلقائياً عند الضغط على زر "ترقيم تلقائي"
-function autoFormatCardTextarea(id) {
-  const textarea = getStudentsTextarea(id);
-  if (!textarea) return;
-
-  const formatted = formatStudentsToNumberedPoints(textarea.value);
-  if (!formatted) {
-    showToast("تنبيه", "يرجى كتابة أو لصق أسماء الطلاب أولاً", "info");
-    return;
-  }
-
-  textarea.value = formatted;
-  onStudentsInputChanged(id);
-  // حفظ الترقيم تلقائياً
-  window.firebaseService.update(id, { studentsList: formatted });
-  showToast("تم الترقيم بنجاح", "تم تنظيف الأسماء وترقيمها تسلسلياً وحفظها", "success");
-}
-
-// حفظ قائمة الطلاب في السحابة
-async function saveCardStudentsList(id) {
-  const textarea = getStudentsTextarea(id);
-  if (!textarea) return;
-
-  const content = textarea.value;
-  await window.firebaseService.update(id, { studentsList: content });
-  showToast("تم الحفظ 💾", "تم حفظ قائمة الطلاب بنجاح في السحابة", "success");
-}
-
-// مسح محتوى الـ Textarea
-function clearCardTextarea(id) {
-  const textarea = getStudentsTextarea(id);
-  if (!textarea) return;
-
-  textarea.value = "";
-  onStudentsInputChanged(id);
-  window.firebaseService.update(id, { studentsList: "" });
-}
-
-// صياغة الرسالة الرسمية للواتس بالصيغة الثابتة المعتمدة
 function generateWhatsAppMessageText(universityName, rawStudentsText) {
-  // الترقيم التسلسلي التلقائي لأسماء الطلاب
   const formattedNumberedStudents = formatStudentsToNumberedPoints(rawStudentsText);
-
   const studentsBody = formattedNumberedStudents.length > 0 
     ? formattedNumberedStudents 
     : "(برجاء إدراج أسماء الطلاب)";
 
-  // الصيغة الرسمية تنتهي بـ شاكرين لسيادتكم وافر التعاون والتقدير فقط بدون أسماء
+  const senderSignature = currentUser 
+    ? `${currentUser.fullName}\n${currentUser.jobTitle} - ${currentUser.university}`
+    : `مهندس بولس سمير\nمدير شئون الطلاب - جامعة اللوتس`;
+
   return `الساده مسئول شئون طلاب جامعة ${universityName}
 تحية طيبة وبعد،
 
 برجاء من سيادتكم سحب الاطلاب الاتي :
 ${studentsBody}
 
-شاكرين لسيادتكم وافر التعاون والتقدير`;
+شاكرين لسيادتكم وافر التعاون والتقدير.
+${senderSignature}`;
 }
 
-// إرسال الرسالة مباشرة عبر الواتساب وتفريغ الخانة فوراً لاستقبال أسماء جديدة
-function sendViaWhatsApp(id) {
-  const rep = allRepresentatives.find((r) => r.id === id);
-  if (!rep) return;
+// ==========================================
+// 12. معاينة وطباعة الكشف الرسمي (بدون أي توقيعات في الأسفل)
+// ==========================================
 
-  const universityName = rep.university || "";
-  const fullName = rep.fullName || "";
-  const phone = rep.phone || "";
+function openPrintReportModal(requestId) {
+  const req = allRequests.find((r) => r.id === requestId);
+  if (!req) return;
 
-  const textarea = getStudentsTextarea(id);
-  const rawText = textarea ? textarea.value : (rep.studentsList || "");
+  const modal = document.getElementById("printReportModal");
+  const container = document.getElementById("printSheetContainer");
+  if (!modal || !container) return;
 
-  // التحقق من وجود أسماء قبل الإرسال
-  if (!rawText.trim()) {
-    showToast("تنبيه", "يرجى كتابة أو لصق أسماء الطلاب أولاً قبل الإرسال", "error");
-    if (textarea) textarea.focus();
-    return;
-  }
-
-  // تطبيق الترقيم التسلسلي تلقائياً
-  const numberedText = formatStudentsToNumberedPoints(rawText);
-
-  // إنشاء الرسالة بالصيغة المعتمدة
-  const message = generateWhatsAppMessageText(universityName, numberedText || rawText);
-
-  // استخراج وتجهيز رقم الموبايل للواتساب
-  const whatsAppNumber = getWhatsAppPhoneNumber(phone);
-
-  // فتح رابط الواتساب المباشر
-  const encodedText = encodeURIComponent(message);
-  const waUrl = `https://api.whatsapp.com/send?phone=${whatsAppNumber}&text=${encodedText}`;
-
-  // فتح المحادثة في نافذة جديدة
-  window.open(waUrl, "_blank");
-
-  // تفريغ الخانة فوراً بعد الإرسال لتكون جاهزة لاستقبال أسماء أخرى (في الكمبيوتر والموبايل)
-  const desktop = document.getElementById(`students-input-${id}`);
-  const mobile = document.getElementById(`students-input-mobile-${id}`);
-  if (desktop) desktop.value = "";
-  if (mobile) mobile.value = "";
-
-  rep.studentsList = "";
-  const badgeCount = document.getElementById(`badge-count-${id}`);
-  const badgeCountMobile = document.getElementById(`badge-count-mobile-${id}`);
-  if (badgeCount) badgeCount.innerText = "0 طلاب";
-  if (badgeCountMobile) badgeCountMobile.innerText = "0 طلاب";
-
-  // حفظ تفريغ الخانة في السحابة ومحلياً
-  window.firebaseService.update(id, { studentsList: "" });
-
-  showToast("تم إرسال الطلب 📲", "تم إرسال الأسماء وتفريغ الخانة لتكون جاهزة لأسماء جديدة", "success");
-}
-
-// نسخ الرسالة الرسمية للحافظة
-function copyFormattedWhatsAppMessage(id) {
-  const rep = allRepresentatives.find((r) => r.id === id);
-  if (!rep) return;
-
-  const universityName = rep.university || "";
-  const textarea = getStudentsTextarea(id);
-  const rawText = textarea ? textarea.value : (rep.studentsList || "");
-  const numberedText = formatStudentsToNumberedPoints(rawText);
-
-  const message = generateWhatsAppMessageText(universityName, numberedText || rawText);
-  copyToClipboard(message, "تم نسخ صيغة رسالة الواتساب الرسمية إلى الحافظة!");
-}
-
-// تأكيد وحذف السجل
-function deleteRepresentativePrompt(id) {
-  const rep = allRepresentatives.find((r) => r.id === id);
-  const name = rep ? rep.fullName : "المسؤول";
-
-  if (confirm(`هل أنت متأكد من رغبتك في حذف بيانات مسؤول (${name}) نهائياً؟`)) {
-    window.firebaseService.delete(id);
-    showToast("تم الحذف", `تم حذف سجل ${name} بنجاح`, "info");
-  }
-}
-
-// نسخ إلى الحافظة
-function copyToClipboard(text, successMsg) {
-  if (!navigator.clipboard) {
-    // طريقة بديلة للمتصفحات القديمة
-    const tempInput = document.createElement("textarea");
-    tempInput.value = text;
-    document.body.appendChild(tempInput);
-    tempInput.select();
-    document.execCommand("copy");
-    document.body.removeChild(tempInput);
-    showToast("تم النسخ", successMsg || "تم النسخ بنجاح", "success");
-    return;
-  }
-
-  navigator.clipboard.writeText(text).then(() => {
-    showToast("تم النسخ", successMsg || "تم النسخ بنجاح", "success");
-  }).catch((err) => {
-    console.error("Clipboard copy error:", err);
+  const students = req.students || [];
+  const today = new Date().toLocaleDateString("ar-EG", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
   });
+
+  // الطباعة الرسمية: بدون أي توقيعات من الأسفل بناءً على طلب المستخدم
+  container.innerHTML = `
+    <div class="border-b-2 border-slate-900 pb-3 mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-right leading-tight">
+          <p class="font-bold text-sm">جمهورية مصر العربية</p>
+          <p class="text-xs text-slate-700">وزارة التعليم العالي والبحث العلمي</p>
+          <p class="text-xs font-bold text-amber-700 mt-0.5">${escapeHtml(req.targetUniversity)}</p>
+        </div>
+        <div class="text-center">
+          <h2 class="text-lg font-black text-slate-900">إدارة شئون الطلاب</h2>
+          <h3 class="text-xs font-bold text-slate-700">كشف سحب ملفات الطلاب</h3>
+        </div>
+        <div class="text-left font-mono text-xs">
+          <p>التاريخ: ${today}</p>
+          <p>الكود: ${req.id}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-3 text-xs font-bold leading-relaxed">
+      <p>الجامعة الطالبة: <span class="font-black">${escapeHtml(req.senderUniversity)}</span></p>
+      <p>المسؤول المرسل: <span>${escapeHtml(req.senderName)}</span> (هاتف: <span dir="ltr">${escapeHtml(req.senderPhone)}</span>)</p>
+    </div>
+
+    <table class="w-full text-right border border-slate-400 text-xs my-3">
+      <thead>
+        <tr class="bg-slate-100 border-b border-slate-400 font-bold">
+          <th class="p-2 border border-slate-400 w-10 text-center">م</th>
+          <th class="p-2 border border-slate-400">اسم الطالب</th>
+          <th class="p-2 border border-slate-400 text-center w-32">الرقم القومي</th>
+          <th class="p-2 border border-slate-400 text-center w-24">حالة السحب</th>
+          <th class="p-2 border border-slate-400">الملاحظات</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${students.map((st, i) => `
+          <tr class="border-b border-slate-300">
+            <td class="p-2 border border-slate-400 text-center font-bold">${i + 1}</td>
+            <td class="p-2 border border-slate-400 font-bold">${escapeHtml(st.name)}</td>
+            <td class="p-2 border border-slate-400 text-center font-mono" dir="ltr">${escapeHtml(st.nationalId || '-')}</td>
+            <td class="p-2 border border-slate-400 text-center font-bold">
+              ${st.isCompleted ? 'تم السحب ✅' : 'قيد السحب ⏳'}
+            </td>
+            <td class="p-2 border border-slate-400">${escapeHtml(st.notes || '-')}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  modal.classList.remove("hidden");
 }
 
-// إظهار إشعار عائم Toast Notification
+function closePrintModal() {
+  const modal = document.getElementById("printReportModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+// ==========================================
+// 13. Toast Alert Notification
+// ==========================================
 let toastTimeout = null;
 function showToast(title, message, type = "success") {
   const toast = document.getElementById("toastAlert");
@@ -788,13 +1789,13 @@ function showToast(title, message, type = "success") {
   toastMessage.innerText = message;
 
   if (type === "success") {
-    toastIcon.className = "w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center";
+    toastIcon.className = "w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs";
     toastIcon.innerHTML = `<i class="fa-solid fa-check"></i>`;
   } else if (type === "error") {
-    toastIcon.className = "w-8 h-8 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center";
+    toastIcon.className = "w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs";
     toastIcon.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>`;
   } else {
-    toastIcon.className = "w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center";
+    toastIcon.className = "w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs";
     toastIcon.innerHTML = `<i class="fa-solid fa-info"></i>`;
   }
 
@@ -802,602 +1803,8 @@ function showToast(title, message, type = "success") {
   toast.classList.add("translate-y-0", "opacity-100");
 
   if (toastTimeout) clearTimeout(toastTimeout);
-
   toastTimeout = setTimeout(() => {
     toast.classList.remove("translate-y-0", "opacity-100");
     toast.classList.add("translate-y-24", "opacity-0", "pointer-events-none");
   }, 3500);
-}
-
-// دوال حماية النصوص من الـ XSS
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function escapeJs(str) {
-  if (!str) return "";
-  return String(str).replace(/'/g, "\\'");
-}
-
-/* =========================================================================
-   نظام لوحة تحكم الإدارة المركزية (Admin Dashboard - PIN: 8520)
-   تصميم: مهندس بولس سمير - مدير شئون الطلاب جامعة اللوتس
-   ========================================================================= */
-
-// معالجة النقر المزدوج على العنوان الرئيسي باللمس على الموبايل (Touch Double-Tap)
-let lastTitleTouchTime = 0;
-function handleTitleTouch(e) {
-  const currentTime = Date.now();
-  const tapInterval = currentTime - lastTitleTouchTime;
-  if (tapInterval < 400 && tapInterval > 50) {
-    if (e.cancelable) e.preventDefault();
-    handleHeaderDblClick();
-  }
-  lastTitleTouchTime = currentTime;
-}
-
-// معالجة النقر المزدوج على العنوان الرئيسي في الترويسة
-function handleHeaderDblClick() {
-  if (isAdminAuthenticated || sessionStorage.getItem("admin_auth") === "true") {
-    isAdminAuthenticated = true;
-    switchView("admin");
-  } else {
-    openAdminAuthModal();
-  }
-}
-
-// فتح نافذة التحقق من كلمة مرور الإدارة
-function openAdminAuthModal() {
-  const modal = document.getElementById("adminAuthModal");
-  const input = document.getElementById("adminPasswordInput");
-  const errorMsg = document.getElementById("adminPasswordError");
-
-  if (!modal || !input) return;
-
-  input.value = "";
-  if (errorMsg) errorMsg.classList.add("hidden");
-  modal.classList.remove("hidden");
-  setTimeout(() => input.focus(), 150);
-}
-
-// إغلاق نافذة التحقق
-function closeAdminAuthModal() {
-  const modal = document.getElementById("adminAuthModal");
-  if (modal) modal.classList.add("hidden");
-}
-
-// التحقق من كلمة المرور 8520
-function submitAdminPassword() {
-  const input = document.getElementById("adminPasswordInput");
-  const errorMsg = document.getElementById("adminPasswordError");
-  if (!input) return;
-
-  const enteredPin = convertArabicNumeralsToEnglish(input.value.trim());
-
-  if (enteredPin === ADMIN_SECRET_PIN) {
-    isAdminAuthenticated = true;
-    sessionStorage.setItem("admin_auth", "true");
-    closeAdminAuthModal();
-    switchView("admin");
-    showToast("مرحباً بك في لوحة الإدارة 🛡️", "تم تسجيل الدخول بنجاح بصلاحيات المدير", "success");
-  } else {
-    if (errorMsg) errorMsg.classList.remove("hidden");
-    input.value = "";
-    input.focus();
-  }
-}
-
-// الخروج من لوحة الإدارة
-function exitAdminView() {
-  isAdminAuthenticated = false;
-  sessionStorage.removeItem("admin_auth");
-  switchView("dashboard");
-  showToast("تم تسجيل الخروج", "تمت العودة إلى السجل العام", "info");
-}
-
-// تحديث كروت الإحصائيات الشاملة في الإدارة
-function updateAdminStats() {
-  const statUnis = document.getElementById("adminStatUniversities");
-  const statReps = document.getElementById("adminStatRepresentatives");
-  const statStudents = document.getElementById("adminStatStudents");
-  const statActiveUnis = document.getElementById("adminStatActiveUnis");
-
-  // 1. إجمالي الجامعات الفريدة
-  const uniqueUniversities = new Set(
-    allRepresentatives
-      .map((r) => (r.university || "").trim())
-      .filter((u) => u.length > 0)
-  );
-  if (statUnis) statUnis.innerText = uniqueUniversities.size;
-
-  // 2. إجمالي المسؤولين
-  if (statReps) statReps.innerText = allRepresentatives.length;
-
-  // 3. إجمالي الطلاب في كل الجامعات
-  let totalStudents = 0;
-  let activeUnisWithStudentsCount = 0;
-
-  allRepresentatives.forEach((rep) => {
-    const count = countStudentsInText(rep.studentsList || "");
-    totalStudents += count;
-    if (count > 0) {
-      activeUnisWithStudentsCount++;
-    }
-  });
-
-  if (statStudents) statStudents.innerText = totalStudents;
-  if (statActiveUnis) statActiveUnis.innerText = activeUnisWithStudentsCount;
-}
-
-// رندر جدول الإدارة الشامل مع كافة الصلاحيات (للكمبيوتر والهاتف المحمول)
-function renderAdminTable() {
-  const tableBody = document.getElementById("adminTableBody");
-  const adminRecordsContainer = document.getElementById("adminRecordsContainer");
-  const mobileContainer = document.getElementById("adminMobileContainer");
-  const emptyState = document.getElementById("adminEmptyState");
-  const filteredBadge = document.getElementById("adminFilteredCount");
-
-  if (!tableBody) return;
-
-  // فلترة حسب البحث الإداري
-  let reps = allRepresentatives;
-  if (adminSearchQuery && adminSearchQuery.trim() !== "") {
-    const qNorm = normalizeArabic(adminSearchQuery);
-    const terms = qNorm.split(/\s+/).filter((t) => t.length > 0);
-    reps = allRepresentatives.filter((rep) => {
-      const fullText = normalizeArabic(
-        `${rep.fullName || ""} ${rep.phone || ""} ${rep.university || ""} ${rep.studentsList || ""}`
-      );
-      return terms.every((t) => fullText.includes(t));
-    });
-  }
-
-  adminFilteredRepresentatives = reps;
-
-  if (filteredBadge) {
-    filteredBadge.innerText = reps.length;
-  }
-
-  if (reps.length === 0) {
-    tableBody.innerHTML = "";
-    if (mobileContainer) mobileContainer.innerHTML = "";
-    if (adminRecordsContainer) adminRecordsContainer.classList.add("hidden");
-    if (emptyState) emptyState.classList.remove("hidden");
-    return;
-  }
-
-  if (emptyState) emptyState.classList.add("hidden");
-  if (adminRecordsContainer) adminRecordsContainer.classList.remove("hidden");
-
-  // 1. توليد صفوف الجدول للكمبيوتر (md وما فوق)
-  tableBody.innerHTML = reps.map((rep, idx) => {
-    const studentCount = countStudentsInText(rep.studentsList || "");
-    const cleanStudents = (rep.studentsList || "").trim();
-
-    return `
-      <tr class="hover:bg-slate-800/40 transition-colors border-b border-white/5" id="admin-row-${rep.id}">
-        <!-- 1. # -->
-        <td class="py-3 px-3 text-center text-slate-400 font-mono font-bold text-xs align-middle">
-          ${idx + 1}
-        </td>
-
-        <!-- 2. الجامعة -->
-        <td class="py-3 px-4 align-middle">
-          <div class="flex items-center gap-2">
-            <span class="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs">
-              <i class="fa-solid fa-landmark"></i>
-            </span>
-            <span class="font-bold text-white text-sm">
-              ${escapeHtml(rep.university)}
-            </span>
-          </div>
-        </td>
-
-        <!-- 3. اسم المسؤول -->
-        <td class="py-3 px-4 align-middle font-semibold text-slate-100 text-sm">
-          ${escapeHtml(rep.fullName)}
-        </td>
-
-        <!-- 4. الموبايل -->
-        <td class="py-3 px-4 align-middle whitespace-nowrap">
-          <a 
-            href="tel:${rep.phone}" 
-            class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-mono font-bold text-xs inline-flex items-center gap-1.5 transition-colors border border-white/10"
-            title="اتصال"
-          >
-            <i class="fa-solid fa-phone text-[10px]"></i>
-            <span dir="ltr">${escapeHtml(rep.phone)}</span>
-          </a>
-        </td>
-
-        <!-- 5. عدد الطلاب -->
-        <td class="py-3 px-3 text-center align-middle whitespace-nowrap">
-          <span class="px-2.5 py-1 rounded-full text-xs font-bold font-mono ${
-            studentCount > 0 
-              ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' 
-              : 'bg-slate-800 text-slate-400 border border-white/10'
-          }">
-            ${studentCount} طالب
-          </span>
-        </td>
-
-        <!-- 6. تفاصيل أسماء الطلاب -->
-        <td class="py-3 px-4 align-middle">
-          ${
-            cleanStudents.length > 0
-              ? `<div class="max-h-20 overflow-y-auto custom-scrollbar p-2 rounded-xl bg-slate-900/60 border border-white/5 text-xs text-slate-200 whitespace-pre-line leading-relaxed font-sans">${escapeHtml(cleanStudents)}</div>`
-              : `<span class="text-xs text-slate-500 italic">لا توجد أسماء مسجلة حالياً</span>`
-          }
-        </td>
-
-        <!-- 7. لوحة التحكم والإجراءات -->
-        <td class="py-3 px-4 align-middle text-center">
-          <div class="flex items-center justify-center gap-1.5">
-            <!-- تعديل -->
-            <button 
-              onclick="openAdminEditModal('${rep.id}')"
-              class="p-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs transition-all cursor-pointer hover:scale-105"
-              title="تعديل السجل بالكامل"
-            >
-              <i class="fa-solid fa-pen-to-square"></i>
-            </button>
-
-            <!-- تفريغ الأسماء -->
-            <button 
-              onclick="adminClearStudents('${rep.id}')"
-              class="p-2 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-xs transition-all cursor-pointer hover:scale-105"
-              title="تفريغ قائمة أسماء الطلاب"
-            >
-              <i class="fa-solid fa-broom"></i>
-            </button>
-
-            <!-- حذف -->
-            <button 
-              onclick="adminDeleteRepresentative('${rep.id}')"
-              class="p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-xs transition-all cursor-pointer hover:scale-105"
-              title="حذف المسؤول نهائياً"
-            >
-              <i class="fa-regular fa-trash-can"></i>
-            </button>
-
-            <!-- واتساب -->
-            <button 
-              onclick="sendViaWhatsApp('${rep.id}')"
-              class="p-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs transition-all cursor-pointer hover:scale-105"
-              title="إرسال طلب واتساب"
-            >
-              <i class="fa-brands fa-whatsapp"></i>
-            </button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
-
-  // 2. توليد كروت الإدارة للموبايل (أقل من md)
-  if (mobileContainer) {
-    mobileContainer.innerHTML = reps.map((rep, idx) => {
-      const studentCount = countStudentsInText(rep.studentsList || "");
-      const cleanStudents = (rep.studentsList || "").trim();
-
-      return `
-        <div class="glass-card rounded-2xl p-4 border border-white/10 space-y-3 shadow-lg" id="admin-mobile-${rep.id}">
-          <div class="flex items-start justify-between gap-2 border-b border-white/10 pb-2.5">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="p-1.5 rounded-lg bg-amber-500/15 text-amber-400 text-xs">
-                  <i class="fa-solid fa-landmark"></i>
-                </span>
-                <span class="font-black text-white text-base leading-snug">${escapeHtml(rep.university)}</span>
-              </div>
-              <p class="text-xs text-slate-300 font-semibold mt-1 flex items-center gap-1.5">
-                <i class="fa-solid fa-user-tie text-amber-400/80 text-xs"></i>
-                <span>${escapeHtml(rep.fullName)}</span>
-              </p>
-            </div>
-            <span class="px-2.5 py-0.5 rounded-full bg-slate-800 text-amber-300 font-mono text-xs font-bold border border-white/10">
-              #${idx + 1}
-            </span>
-          </div>
-
-          <div class="flex items-center justify-between gap-2 text-xs">
-            <a 
-              href="tel:${rep.phone}" 
-              class="px-3 py-1.5 rounded-xl bg-slate-800 text-emerald-400 font-mono font-bold flex items-center gap-2 border border-white/10"
-            >
-              <i class="fa-solid fa-phone text-xs"></i>
-              <span dir="ltr">${escapeHtml(rep.phone)}</span>
-            </a>
-            <span class="px-2.5 py-1 rounded-full text-xs font-bold font-mono ${
-              studentCount > 0 
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                : 'bg-slate-800 text-slate-400 border border-white/10'
-            }">
-              ${studentCount} طالب
-            </span>
-          </div>
-
-          ${
-            cleanStudents.length > 0
-              ? `<div class="max-h-24 overflow-y-auto custom-scrollbar p-2.5 rounded-xl bg-slate-900/60 border border-white/5 text-xs text-slate-200 whitespace-pre-line leading-relaxed font-sans">${escapeHtml(cleanStudents)}</div>`
-              : `<p class="text-xs text-slate-500 italic">لا توجد أسماء مسجلة</p>`
-          }
-
-          <!-- أزرار الإجراءات على الموبايل -->
-          <div class="grid grid-cols-4 gap-2 pt-2 border-t border-white/10">
-            <button 
-              onclick="openAdminEditModal('${rep.id}')"
-              class="py-2 px-2 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-bold flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95"
-            >
-              <i class="fa-solid fa-pen-to-square text-sm"></i>
-              <span class="text-[10px]">تعديل</span>
-            </button>
-            <button 
-              onclick="adminClearStudents('${rep.id}')"
-              class="py-2 px-2 rounded-xl bg-blue-500/15 text-blue-300 border border-blue-500/30 text-xs font-bold flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95"
-            >
-              <i class="fa-solid fa-broom text-sm"></i>
-              <span class="text-[10px]">مسح</span>
-            </button>
-            <button 
-              onclick="adminDeleteRepresentative('${rep.id}')"
-              class="py-2 px-2 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 text-xs font-bold flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95"
-            >
-              <i class="fa-regular fa-trash-can text-sm"></i>
-              <span class="text-[10px]">حذف</span>
-            </button>
-            <button 
-              onclick="sendViaWhatsApp('${rep.id}')"
-              class="py-2 px-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95"
-            >
-              <i class="fa-brands fa-whatsapp text-base"></i>
-              <span class="text-[10px]">واتس</span>
-            </button>
-          </div>
-        </div>
-      `;
-    }).join("");
-  }
-}
-
-// بحث الإدارة
-function handleAdminSearch(val) {
-  adminSearchQuery = val || "";
-  renderAdminTable();
-}
-
-// فتح نافذة تعديل بيانات المسؤول
-function openAdminEditModal(id) {
-  const rep = allRepresentatives.find((r) => r.id === id);
-  if (!rep) return;
-
-  const modal = document.getElementById("adminEditModal");
-  const repIdInput = document.getElementById("editRepId");
-  const nameInput = document.getElementById("editFullNameInput");
-  const phoneInput = document.getElementById("editPhoneInput");
-  const uniInput = document.getElementById("editUniversityInput");
-  const studentsInput = document.getElementById("editStudentsInput");
-
-  if (!modal) return;
-
-  repIdInput.value = rep.id;
-  nameInput.value = rep.fullName || "";
-  phoneInput.value = rep.phone || "";
-  uniInput.value = rep.university || "";
-  studentsInput.value = rep.studentsList || "";
-
-  modal.classList.remove("hidden");
-}
-
-// إغلاق نافذة التعديل
-function closeAdminEditModal() {
-  const modal = document.getElementById("adminEditModal");
-  if (modal) modal.classList.add("hidden");
-}
-
-// حفظ تعديلات المسؤول
-async function handleAdminEditSubmit(e) {
-  e.preventDefault();
-  const repId = document.getElementById("editRepId").value;
-  const fullName = document.getElementById("editFullNameInput").value.trim();
-  const rawPhone = document.getElementById("editPhoneInput").value.trim();
-  const university = document.getElementById("editUniversityInput").value.trim();
-  const studentsList = document.getElementById("editStudentsInput").value;
-  const saveBtn = document.getElementById("saveEditBtn");
-
-  if (!validateFullName(fullName)) {
-    showToast("تنبيه", "يرجى إدخال اسم ثلاثي صحيح (3 مقاطع على الأقل)", "error");
-    return;
-  }
-
-  const cleanedPhone = cleanPhoneNumber(rawPhone);
-  if (!/^01[0125][0-9]{8}$/.test(cleanedPhone)) {
-    showToast("تنبيه", "يرجى إدخال رقم موبايل مصري صحيح مكون من 11 رقماً", "error");
-    return;
-  }
-
-  if (!university) {
-    showToast("تنبيه", "يرجى إدخال اسم الجامعة", "error");
-    return;
-  }
-
-  saveBtn.disabled = true;
-  saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>جاري الحفظ...</span>`;
-
-  try {
-    const updates = {
-      fullName,
-      phone: cleanedPhone,
-      whatsappPhone: getWhatsAppPhoneNumber(cleanedPhone),
-      university,
-      studentsList
-    };
-
-    await window.firebaseService.update(repId, updates);
-
-    // تحديث الذاكرة
-    const index = allRepresentatives.findIndex((r) => r.id === repId);
-    if (index !== -1) {
-      allRepresentatives[index] = { ...allRepresentatives[index], ...updates };
-    }
-
-    closeAdminEditModal();
-    updateAdminStats();
-    renderAdminTable();
-    showToast("تم الحفظ بنجاح 💾", `تم تحديث بيانات مسؤول ${fullName} بنجاح`, "success");
-  } catch (err) {
-    console.error("Admin edit error:", err);
-    showToast("خطأ", "حدث خطأ أثناء حفظ التعديلات", "error");
-  } finally {
-    saveBtn.disabled = false;
-    saveBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i><span>حفظ التعديلات في السحابة</span>`;
-  }
-}
-
-// حذف مسؤول من الإدارة
-async function adminDeleteRepresentative(id) {
-  const rep = allRepresentatives.find((r) => r.id === id);
-  const name = rep ? rep.fullName : "المسؤول";
-
-  if (confirm(`هل أنت متأكد تماماً من رغبتك في حذف بيانات مسؤول (${name}) من النظام نهائياً؟`)) {
-    await window.firebaseService.delete(id);
-    allRepresentatives = allRepresentatives.filter((r) => r.id !== id);
-    updateAdminStats();
-    renderAdminTable();
-    showToast("تم الحذف 🗑️", `تم حذف سجل ${name} نهائياً`, "info");
-  }
-}
-
-// تفريغ أسماء الطلاب لمسؤول معين من الإدارة
-async function adminClearStudents(id) {
-  const rep = allRepresentatives.find((r) => r.id === id);
-  if (!rep) return;
-
-  if (confirm(`هل تريد تفريغ قائمة أسماء الطلاب الخاصة بجامعة (${rep.university})؟`)) {
-    await window.firebaseService.update(id, { studentsList: "" });
-    rep.studentsList = "";
-    updateAdminStats();
-    renderAdminTable();
-    showToast("تم التفريغ 🧹", `تم تفريغ أسماء الطلاب الخاصة بجامعة ${rep.university}`, "success");
-  }
-}
-
-// فتح نافذة إضافة مسؤول جديد من الإدارة
-function openAdminAddModal() {
-  const modal = document.getElementById("adminAddModal");
-  const form = document.getElementById("adminAddForm");
-  if (!modal) return;
-
-  if (form) form.reset();
-  modal.classList.remove("hidden");
-}
-
-// إغلاق نافذة إضافة مسؤول
-function closeAdminAddModal() {
-  const modal = document.getElementById("adminAddModal");
-  if (modal) modal.classList.add("hidden");
-}
-
-// حفظ المسؤول الجديد المضاف من الإدارة
-async function handleAdminAddSubmit(e) {
-  e.preventDefault();
-  const fullNameInput = document.getElementById("adminNewFullName");
-  const phoneInput = document.getElementById("adminNewPhone");
-  const uniInput = document.getElementById("adminNewUniversity");
-  const saveBtn = document.getElementById("saveNewAdminBtn");
-
-  const fullName = fullNameInput.value.trim();
-  const rawPhone = phoneInput.value.trim();
-  const university = uniInput.value.trim();
-
-  if (!validateFullName(fullName)) {
-    showToast("تنبيه", "يرجى إدخال اسم ثلاثي صحيح (3 مقاطع على الأقل)", "error");
-    return;
-  }
-
-  const cleanedPhone = cleanPhoneNumber(rawPhone);
-  if (!/^01[0125][0-9]{8}$/.test(cleanedPhone)) {
-    showToast("تنبيه", "يرجى إدخال رقم موبايل مصري صحيح مكون من 11 رقماً", "error");
-    return;
-  }
-
-  if (!university) {
-    showToast("تنبيه", "يرجى كتابة أو اختيار اسم الجامعة", "error");
-    return;
-  }
-
-  saveBtn.disabled = true;
-  saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>جاري الإضافة...</span>`;
-
-  try {
-    const newRep = {
-      fullName,
-      phone: cleanedPhone,
-      whatsappPhone: getWhatsAppPhoneNumber(cleanedPhone),
-      university,
-      studentsList: ""
-    };
-
-    await window.firebaseService.add(newRep);
-
-    closeAdminAddModal();
-    updateAdminStats();
-    renderAdminTable();
-    showToast("تمت الإضافة بنجاح 🎉", `تم تسجيل ${fullName} بنجاح في المنظومة`, "success");
-  } catch (err) {
-    console.error("Admin add error:", err);
-    showToast("خطأ", "حدث خطأ أثناء إضافة المسؤول", "error");
-  } finally {
-    saveBtn.disabled = false;
-    saveBtn.innerHTML = `<i class="fa-solid fa-check"></i><span>إضافة وحفظ المسؤول</span>`;
-  }
-}
-
-// تصدير كافة البيانات إلى ملف Excel (CSV مع UTF-8 BOM لضمان اللغة العربية)
-function exportAdminDataToExcel() {
-  if (!allRepresentatives || allRepresentatives.length === 0) {
-    showToast("تنبيه", "لا توجد بيانات متاحة للتصدير حالياً", "info");
-    return;
-  }
-
-  // ترويسة ملف الإكسيل
-  const headers = ["م", "اسم الجامعة", "اسم المسؤول", "رقم الموبايل", "عدد الطلاب", "أسماء الطلاب المراد سحبهم"];
-  
-  // تجهيز الصفوف
-  const rows = allRepresentatives.map((rep, index) => {
-    const studentCount = countStudentsInText(rep.studentsList || "");
-    const cleanStudents = (rep.studentsList || "").replace(/"/g, '""');
-
-    return [
-      index + 1,
-      `"${(rep.university || "").replace(/"/g, '""')}"`,
-      `"${(rep.fullName || "").replace(/"/g, '""')}"`,
-      `"${(rep.phone || "").replace(/"/g, '""')}"`,
-      studentCount,
-      `"${cleanStudents}"`
-    ].join(",");
-  });
-
-  // إضافة UTF-8 BOM لفتح العربي بدون تشفير تالف في الإكسيل
-  const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
-
-  // إنشاء رابط التحميل
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const downloadLink = document.createElement("a");
-  
-  const today = new Date().toISOString().slice(0, 10);
-  downloadLink.href = url;
-  downloadLink.setAttribute("download", `تقرير_شئون_الطلاب_الجامعات_الخاصة_والأهلية_${today}.csv`);
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  document.body.removeChild(downloadLink);
-
-  showToast("تم التصدير بنجاح 📊", "تم تنزيل ملف Excel المتوافق مع اللغة العربية", "success");
 }
